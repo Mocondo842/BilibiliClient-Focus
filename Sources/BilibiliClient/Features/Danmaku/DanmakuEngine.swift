@@ -249,6 +249,10 @@ final class DanmakuEngine {
     private var stageScale: CGFloat = 1
     /// 最近一次应用到弹幕视图上的播放倍速（长按右方向键 2 倍速时跟随）
     private var appliedRate: Float = 0
+    /// 最近一次应用的外观设置（避免每帧 updateNSView 都重设一遍库属性）
+    private var appliedSettings: DanmakuSettings?
+    /// 用户字号缩放：作为舞台缩放的额外倍数，纯 transform，不重排轨道
+    private(set) var fontScale: CGFloat = 1
     /// 文字位图的栅格化倍率（跟随窗口 backing scale）
     private var renderScale: CGFloat = NSScreen.main?.backingScaleFactor ?? 2
     /// 舞台基准之外的额外显示缩放（全屏跟随期间由渲染层传入）
@@ -276,6 +280,28 @@ final class DanmakuEngine {
         view.trackHeight = Self.rowHeight
         view.paddingTop = Self.topInset
         view.paddingBottom = Self.bottomReserve
+        view.alphaValue = CGFloat(DanmakuSettings.default.opacity)
+    }
+
+    // MARK: - 外观 / 行为设置
+
+    /// 应用弹幕设置（不透明度、显示区域、显示类型、是否允许重叠、字号缩放）。
+    ///
+    /// 前四项都是 DanmakuKit 的现成属性，改完即时生效（关掉某类型会立刻清掉那类弹幕）。
+    /// 字号缩放不重排轨道：它作为舞台缩放的额外倍数，整层等比放大，所以拖动滑杆时
+    /// 在屏弹幕会连续变化，而不是"等新弹幕才生效"。
+    func apply(_ settings: DanmakuSettings) {
+        guard settings != appliedSettings else { return }
+        appliedSettings = settings
+        fontScale = CGFloat(settings.fontScale)
+        for view in views {
+            view.alphaValue = CGFloat(settings.opacity)
+            view.displayArea = CGFloat(settings.displayArea.rawValue)
+            view.isOverlap = settings.allowsOverlap
+        }
+        danmakuView.enableFloatingDanmaku = settings.showsFloating
+        danmakuView.enableTopDanmaku = settings.showsTop
+        bottomDanmakuView.enableBottomDanmaku = settings.showsBottom
     }
 
     // MARK: - 数据

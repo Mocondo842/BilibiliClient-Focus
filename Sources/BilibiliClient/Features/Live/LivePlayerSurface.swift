@@ -13,6 +13,7 @@ struct LivePlayerSurface: View {
                 PlayerSurfaceView(player: player,
                                   engine: nil,
                                   danmakuEnabled: false,
+                                  danmakuSettings: .current,
                                   isLive: true,
                                   onSpace: { model.togglePlay() },
                                   onSkip: { _ in })

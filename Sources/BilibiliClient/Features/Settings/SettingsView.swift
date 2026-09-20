@@ -136,6 +136,9 @@ struct SettingsView: View {
                 .labelsHidden()
                 .fixedSize()
             }
+            Text("不透明度、字号、显示区域、显示类型等更多设置，在播放页视频下方的「弹幕设置」里调整。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 

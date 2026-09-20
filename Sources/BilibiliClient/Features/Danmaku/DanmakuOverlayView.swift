@@ -52,6 +52,10 @@ final class DanmakuOverlayNSView: NSView {
     private var timer: Timer?
     /// AVKit 进出全屏会把覆盖层短暂摘下再挂进新窗口，停表要留宽限期
     private var detachWork: DispatchWorkItem?
+    /// 字号滑杆停手后重画位图（拖动过程中不重画，避免每帧栅格化几百条）
+    private var rerasterizeWork: DispatchWorkItem?
+    /// 当前弹幕设置（里面带"全屏弹幕跟随比例"）
+    private var settings = DanmakuSettings.current
 
     init(engine: DanmakuEngine, player: AVPlayer?) {
         self.engine = engine
@@ -68,6 +72,8 @@ final class DanmakuOverlayNSView: NSView {
         }
         topStage.addSubview(engine.danmakuView)
         bottomStage.addSubview(engine.bottomDanmakuView)
+        // 进页面就先套用一次持久化的设置（不透明度/显示区域/类型开关/字号）
+        engine.apply(DanmakuSettings.current)
     }
 
     @available(*, unavailable)
@@ -75,8 +81,33 @@ final class DanmakuOverlayNSView: NSView {
 
     deinit {
         detachWork?.cancel()
+        rerasterizeWork?.cancel()
         timer?.invalidate()
     }
+
+    // MARK: - 弹幕设置
+
+    /// 应用弹幕设置；字号缩放会立刻反映到舞台缩放上（在屏弹幕一起连续变化），
+    /// 等用户停手后再按新密度重画一次文字位图，避免拖动时反复栅格化。
+    func apply(settings: DanmakuSettings) {
+        let fontChanged = abs(CGFloat(settings.fontScale) - engine.fontScale) > 0.001
+            || abs(settings.fullscreenScale - self.settings.fullscreenScale) > 0.001
+        self.settings = settings
+        engine.apply(settings)
+        syncStage()
+        guard fontChanged else { return }
+        rerasterizeWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.rerasterizeWork = nil
+            self.engine.rerasterizeLiveCells()
+        }
+        rerasterizeWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(250), execute: work)
+    }
+
+    /// 点击穿透到下层播放器（弹幕不拦截鼠标、不挡系统控件）
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     // MARK: - 布局 / 舞台跟随
 
@@ -137,9 +168,17 @@ final class DanmakuOverlayNSView: NSView {
         layoutStages(scale: scale)
     }
 
-    /// 舞台缩放：跟随容器宽度（页内 1.0，全屏按画面比例放大）
+    /// 弹幕自己的缩放：画面放大的倍数是 `layoutScale`，弹幕只跟其中一部分。
+    ///
+    /// `1 + (layoutScale - 1) × 跟随比例`：页内（layoutScale = 1）不变；
+    /// 全屏时按比例少长一点，所以不会像画面那样 1:1 撑大。
+    /// 再乘上用户字号设置 `fontScale`，两者互不干扰。
     private func displayScale(for size: CGSize) -> CGFloat {
-        max(size.width / max(stageSize.width, 1), 0.02)
+        let base = max(stageSize.width, 1)
+        let layoutScale = max(size.width / base, 0.02)
+        let follow = CGFloat(settings.fullscreenScale)
+        let danmakuGrowth = 1 + (layoutScale - 1) * follow
+        return max(danmakuGrowth, 0.05) * engine.fontScale
     }
 
     /// 两个舞台层都按基准尺寸摆放，只差锚边；`scale` 由当前容器宽度推出。
@@ -193,11 +232,11 @@ final class DanmakuOverlayNSView: NSView {
         // 清屏重建虽然能让老弹幕立刻对齐，但会换行、会闪，得不偿失。
         stageSize = size
         lastViewportSize = size
-        engine.setDisplayScale(1)
+        engine.setDisplayScale(engine.fontScale)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         engine.setStage(size: size)
-        layoutStages(scale: 1)
+        layoutStages(scale: engine.fontScale)
         CATransaction.commit()
         engine.rerasterizeLiveCells()
     }

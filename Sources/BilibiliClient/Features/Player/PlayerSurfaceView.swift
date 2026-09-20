@@ -13,6 +13,8 @@ struct PlayerSurfaceView: NSViewRepresentable {
     /// 弹幕引擎；直播没有叠加弹幕时传 nil
     let engine: DanmakuEngine?
     let danmakuEnabled: Bool
+    /// 弹幕外观/行为设置（不透明度、字号、显示区域、显示类型…）
+    let danmakuSettings: DanmakuSettings
     /// 直播流：时长恒为不定值，控件条要一直避开时间轴（见 `applyControlsStyle`）
     let isLive: Bool
     let onSpace: () -> Void
@@ -33,6 +35,7 @@ struct PlayerSurfaceView: NSViewRepresentable {
         if let engine {
             view.installDanmaku(engine: engine, enabled: danmakuEnabled)
         }
+        view.applyDanmakuSettings(danmakuSettings)
         return view
     }
 
@@ -42,6 +45,7 @@ struct PlayerSurfaceView: NSViewRepresentable {
         view.onSkip = onSkip
         view.isLive = isLive
         view.setDanmakuEnabled(danmakuEnabled)
+        view.applyDanmakuSettings(danmakuSettings)
         view.attachDanmakuIfNeeded()
     }
 
@@ -69,6 +73,7 @@ final class DanmakuPlayerView: AVPlayerView {
     private var danmakuView: DanmakuOverlayNSView?
     private var danmakuEngine: DanmakuEngine?
     private var danmakuEnabled = false
+    private var danmakuSettings: DanmakuSettings?
     private var attachScheduled = false
 
     private var keyMonitor: Any?
@@ -160,12 +165,19 @@ final class DanmakuPlayerView: AVPlayerView {
         danmakuView?.enabled = enabled
     }
 
+    /// 把播放页里的弹幕设置推给渲染层（不透明度/字号/显示区域/显示类型等）
+    func applyDanmakuSettings(_ settings: DanmakuSettings) {
+        danmakuSettings = settings
+        danmakuView?.apply(settings: settings)
+    }
+
     func attachDanmakuIfNeeded() {
         guard danmakuView == nil,
               let engine = danmakuEngine,
               let overlay = contentOverlayView else { return }
         let view = DanmakuOverlayNSView(engine: engine, player: player)
         view.enabled = danmakuEnabled
+        if let danmakuSettings { view.apply(settings: danmakuSettings) }
         view.translatesAutoresizingMaskIntoConstraints = false
         overlay.addSubview(view)
         NSLayoutConstraint.activate([

@@ -15,6 +15,15 @@ struct VideoDetailView: View {
     /// 当前选中的分P cid（nil = 播放详情默认分P，即第一个分P）
     @State private var selectedPageCid: Int?
     @AppStorage("danmakuEnabled") private var danmakuEnabled = true
+    @AppStorage("danmakuSpeed") private var danmakuSpeed = DanmakuSpeed.normal.rawValue
+    @AppStorage("danmakuOpacity") private var danmakuOpacity = DanmakuSettings.default.opacity
+    @AppStorage("danmakuFontScale") private var danmakuFontScale = DanmakuSettings.default.fontScale
+    @AppStorage("danmakuFullscreenScale") private var danmakuFullscreenScale = DanmakuSettings.default.fullscreenScale
+    @AppStorage("danmakuDisplayArea") private var danmakuDisplayArea = DanmakuSettings.default.displayArea.rawValue
+    @AppStorage("danmakuShowsFloating") private var danmakuShowsFloating = DanmakuSettings.default.showsFloating
+    @AppStorage("danmakuShowsTop") private var danmakuShowsTop = DanmakuSettings.default.showsTop
+    @AppStorage("danmakuShowsBottom") private var danmakuShowsBottom = DanmakuSettings.default.showsBottom
+    @AppStorage("danmakuAllowsOverlap") private var danmakuAllowsOverlap = DanmakuSettings.default.allowsOverlap
     @State private var liked = false
     @State private var coined = false
     @State private var faved = false
@@ -25,6 +34,7 @@ struct VideoDetailView: View {
     @State private var showCoinMenu = false
     @State private var showShareMenu = false
     @State private var showQualityMenu = false
+    @State private var showDanmakuSettings = false
     @State private var isFollowing = false
     @State private var relationLoaded = false
     @State private var likeCount = 0
@@ -417,6 +427,22 @@ struct VideoDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .help(danmakuEnabled ? "关闭弹幕" : "开启弹幕")
+
+                Button {
+                    showDanmakuSettings = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "slider.horizontal.3")
+                        Text("弹幕设置")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("调整不透明度、字号、显示区域、速度与显示类型")
+                .popover(isPresented: $showDanmakuSettings, arrowEdge: .bottom) {
+                    DanmakuSettingsCard()
+                }
 
                 Button {
                     toggleDetach()
@@ -970,7 +996,19 @@ struct VideoDetailView: View {
 
     /// 播放组件：同一份视图既放在页内，也放进按需窗口；画面区不带任何悬浮按钮。
     private func surface() -> VideoPlayerSurface {
-        VideoPlayerSurface(playerController: player, engine: danmaku)
+        VideoPlayerSurface(playerController: player, engine: danmaku, danmakuSettings: danmakuSettings)
+    }
+
+    /// 当前弹幕设置（与设置页共用同一批 `@AppStorage` 键，改完立刻推给渲染层）
+    private var danmakuSettings: DanmakuSettings {
+        DanmakuSettings(opacity: danmakuOpacity,
+                        fontScale: danmakuFontScale,
+                        fullscreenScale: danmakuFullscreenScale,
+                        displayArea: DanmakuDisplayArea(rawValue: danmakuDisplayArea) ?? .full,
+                        showsFloating: danmakuShowsFloating,
+                        showsTop: danmakuShowsTop,
+                        showsBottom: danmakuShowsBottom,
+                        allowsOverlap: danmakuAllowsOverlap)
     }
 
     /// 播放窗口建起时把当前视频注册为系统“正在播放”，媒体键（F7/F8/F9）

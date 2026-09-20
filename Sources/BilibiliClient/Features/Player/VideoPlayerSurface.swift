@@ -12,6 +12,8 @@ import SwiftUI
 struct VideoPlayerSurface: View {
     @ObservedObject var playerController: PlayerController
     let engine: DanmakuEngine
+    /// 播放页里的弹幕设置（改动会立刻应用到在屏弹幕）
+    let danmakuSettings: DanmakuSettings
     @AppStorage("danmakuEnabled") private var danmakuEnabled = true
 
     var body: some View {
@@ -21,6 +23,7 @@ struct VideoPlayerSurface: View {
                 PlayerSurfaceView(player: player,
                                   engine: engine,
                                   danmakuEnabled: danmakuEnabled,
+                                  danmakuSettings: danmakuSettings,
                                   isLive: false,
                                   onSpace: { playerController.togglePlay() },
                                   onSkip: { playerController.skip(by: $0) })
