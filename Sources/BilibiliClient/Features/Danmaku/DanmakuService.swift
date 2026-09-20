@@ -4,7 +4,7 @@ import Foundation
 struct DanmakuItem: Identifiable {
     let id: Int
     let time: Double      // 出现时间（秒）
-    let mode: Int         // 1 滚动 / 4 底部 / 5 顶部
+    let mode: Int         // 1/2/3 滚动 / 4 底部 / 5 顶部
     let fontSize: Int     // B 站字号（12/18/25/36）
     let color: UInt32     // 0xRRGGBB
     let text: String
@@ -82,7 +82,9 @@ private final class DanmakuXMLParserDelegate: NSObject, XMLParserDelegate {
               let mode = Int(fields[1]),
               let fontSize = Int(fields[2]),
               let color = UInt32(fields[3]),
-              mode == 1 || mode == 4 || mode == 5 else {
+              // 1/2/3 都是滚动弹幕（2、3 极少见），4 底部、5 顶部；
+              // 6 逆向 / 7 高级 / 8 代码 / 9 BAS 暂不支持
+              (1...5).contains(mode) else {
             return nil
         }
         let dmid = fields.count >= 8 ? (Int(fields[7]) ?? 0) : 0

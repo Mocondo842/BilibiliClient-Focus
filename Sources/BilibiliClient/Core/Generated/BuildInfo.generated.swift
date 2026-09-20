@@ -1,5 +1,5 @@
 // 由 scripts/build_app.sh 自动生成，请勿手改。
 enum BuildInfo {
-    static let version = "1.6.2"
-    static let build = "132"
+    static let version = "1.7.0"
+    static let build = "133"
 }
