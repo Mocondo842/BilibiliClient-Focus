@@ -52,7 +52,7 @@ struct VideoCardView: View {
             Color.clear
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .overlay {
-                    RemoteImage(url: Formatters.https(pic))
+                    RemoteImage(url: Formatters.https(pic), variant: .card)
                 }
 
             if duration > 0 {

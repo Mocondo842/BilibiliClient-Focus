@@ -160,7 +160,7 @@ struct UpProfileView: View {
 
     private func header(_ card: UpCardData.Card) -> some View {
         HStack(alignment: .top, spacing: 16) {
-            RemoteImage(url: Formatters.https(card.face ?? ""))
+            RemoteImage(url: Formatters.https(card.face ?? ""), variant: .avatar)
                 .frame(width: 76, height: 76)
                 .clipShape(Circle())
                 .overlay(Circle().strokeBorder(.white.opacity(0.15), lineWidth: 1))

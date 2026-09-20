@@ -96,6 +96,7 @@ struct RecommendView: View {
         do {
             let newItems = try await FeedService().recommend(page: 1)
             items = newItems
+            BiliImages.prefetch(newItems.map(\.pic), variant: .card)
             page = 1
             hasLoaded = true
             hasMore = !newItems.isEmpty

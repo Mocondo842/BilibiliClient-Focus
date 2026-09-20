@@ -80,13 +80,13 @@ struct DynamicDetailView: View {
         HStack(spacing: 12) {
             if let mid = item.modules.moduleAuthor?.mid {
                 NavigationLink(value: UpRoute(mid: mid)) {
-                    RemoteImage(url: Formatters.https(item.modules.moduleAuthor?.face ?? ""))
+                    RemoteImage(url: Formatters.https(item.modules.moduleAuthor?.face ?? ""), variant: .avatar)
                         .frame(width: 46, height: 46)
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
             } else {
-                RemoteImage(url: Formatters.https(item.modules.moduleAuthor?.face ?? ""))
+                RemoteImage(url: Formatters.https(item.modules.moduleAuthor?.face ?? ""), variant: .avatar)
                     .frame(width: 46, height: 46)
                     .clipShape(Circle())
             }
@@ -300,13 +300,13 @@ struct DynamicCommentRowView: View {
             Group {
                 if let mid = Int(comment.member?.mid ?? "") {
                     NavigationLink(value: UpRoute(mid: mid)) {
-                        RemoteImage(url: Formatters.https(comment.member?.avatar ?? ""))
+                        RemoteImage(url: Formatters.https(comment.member?.avatar ?? ""), variant: .avatar)
                             .frame(width: 32, height: 32)
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
                 } else {
-                    RemoteImage(url: Formatters.https(comment.member?.avatar ?? ""))
+                    RemoteImage(url: Formatters.https(comment.member?.avatar ?? ""), variant: .avatar)
                         .frame(width: 32, height: 32)
                         .clipShape(Circle())
                 }
@@ -348,7 +348,7 @@ struct DynamicImagePreview: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            RemoteImage(url: url)
+            RemoteImage(url: url, variant: .keepAspect)
                 .scaledToFit()
                 .frame(maxWidth: 1000, maxHeight: 800)
                 .contentShape(Rectangle())

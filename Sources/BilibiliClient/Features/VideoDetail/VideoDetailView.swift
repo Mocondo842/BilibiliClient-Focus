@@ -484,7 +484,7 @@ struct VideoDetailView: View {
         HStack(spacing: 14) {
             NavigationLink(value: UpRoute(mid: view.owner.mid)) {
                 HStack(spacing: 8) {
-                    RemoteImage(url: Formatters.https(view.owner.face ?? ""))
+                    RemoteImage(url: Formatters.https(view.owner.face ?? ""), variant: .avatar)
                         .frame(width: 30, height: 30)
                         .clipShape(Circle())
                     Text(view.owner.name)

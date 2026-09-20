@@ -10,7 +10,7 @@ struct MediaListRow: View {
     var body: some View {
         HStack(spacing: 12) {
             ZStack(alignment: .bottomTrailing) {
-                RemoteImage(url: Formatters.https(coverURL))
+                RemoteImage(url: Formatters.https(coverURL), variant: .card)
                     .frame(width: 132, height: 78)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 if let durationText {

@@ -134,6 +134,7 @@ struct HistoryView: View {
         do {
             let data = try await LibraryService().history()
             items = data.list
+            BiliImages.prefetch(data.list.map(\.cover), variant: .card)
             cursor = data.cursor
             hasMore = !data.list.isEmpty
             hasLoaded = true

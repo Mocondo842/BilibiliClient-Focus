@@ -37,7 +37,7 @@ struct MenuBarPanelView: View {
     private var header: some View {
         HStack(spacing: 12) {
             if let user = session.user {
-                RemoteImage(url: Formatters.https(user.face))
+                RemoteImage(url: Formatters.https(user.face), variant: .avatar)
                     .frame(width: 42, height: 42)
                     .clipShape(Circle())
                     .overlay(Circle().strokeBorder(.white.opacity(0.15), lineWidth: 1))
@@ -196,7 +196,7 @@ private struct MenuBarDynamicRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                RemoteImage(url: Formatters.https(author?.face ?? ""))
+                RemoteImage(url: Formatters.https(author?.face ?? ""), variant: .avatar)
                     .frame(width: 26, height: 26)
                     .clipShape(Circle())
                 Text(author?.name ?? "未知用户")
@@ -223,7 +223,7 @@ private struct MenuBarDynamicRow: View {
                     onOpen(archive.bvid ?? "")
                 } label: {
                     HStack(spacing: 10) {
-                        RemoteImage(url: Formatters.https(archive.cover ?? ""))
+                        RemoteImage(url: Formatters.https(archive.cover ?? ""), variant: .card)
                             .frame(width: 108, height: 62)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                         VStack(alignment: .leading, spacing: 4) {

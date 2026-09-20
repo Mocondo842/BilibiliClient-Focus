@@ -133,6 +133,7 @@ struct WatchLaterView: View {
         do {
             let data = try await LibraryService().watchLater()
             items = data.list
+            BiliImages.prefetch(data.list.map(\.pic), variant: .card)
             totalCount = data.count ?? items.count
             hasLoaded = true
         } catch {

@@ -262,7 +262,7 @@ struct LiveDetailView: View {
         HStack(spacing: 14) {
             NavigationLink(value: UpRoute(mid: detail.uid)) {
                 HStack(spacing: 8) {
-                    RemoteImage(url: Formatters.https(anchorFace ?? ""))
+                    RemoteImage(url: Formatters.https(anchorFace ?? ""), variant: .avatar)
                         .frame(width: 30, height: 30)
                         .clipShape(Circle())
                     Text(anchorName?.isEmpty == false ? anchorName! : "未知主播")

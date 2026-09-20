@@ -22,7 +22,7 @@ struct AccountPanelView: View {
     private var userSection: some View {
         VStack(spacing: 12) {
             if let user = session.user {
-                RemoteImage(url: Formatters.https(user.face))
+                RemoteImage(url: Formatters.https(user.face), variant: .avatar)
                     .frame(width: 60, height: 60)
                     .clipShape(Circle())
                     .overlay(Circle().strokeBorder(.white.opacity(0.15), lineWidth: 1))

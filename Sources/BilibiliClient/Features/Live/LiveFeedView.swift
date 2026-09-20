@@ -96,6 +96,7 @@ struct LiveFeedView: View {
         errorMessage = nil
         do {
             rooms = try await LiveService().recommend(page: 1)
+            BiliImages.prefetch(rooms.map(\.cover), variant: .card)
             page = 1
             hasMore = true
             hasLoaded = true
@@ -175,7 +176,7 @@ struct LiveCardView: View {
             Color.clear
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .overlay {
-                    RemoteImage(url: Formatters.https(room.cover))
+                    RemoteImage(url: Formatters.https(room.cover), variant: .card)
                 }
         }
         .overlay(alignment: .topLeading) {

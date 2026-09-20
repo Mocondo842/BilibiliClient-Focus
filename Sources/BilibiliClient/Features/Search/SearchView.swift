@@ -201,6 +201,7 @@ struct SearchView: View {
             var addedCount = 0
             if reset {
                 results = data.result
+                BiliImages.prefetch(data.result.map(\.pic), variant: .card)
                 page = 1
                 addedCount = results.count
             } else {

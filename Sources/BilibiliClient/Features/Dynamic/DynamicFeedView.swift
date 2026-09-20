@@ -137,7 +137,7 @@ struct DynamicFeedView: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 if let avatar, !avatar.isEmpty {
-                    RemoteImage(url: Formatters.https(avatar))
+                    RemoteImage(url: Formatters.https(avatar), variant: .avatar)
                         .frame(width: 20, height: 20)
                         .clipShape(Circle())
                 }
@@ -194,6 +194,7 @@ struct DynamicFeedView: View {
         do {
             let data = try await DynamicService().feed(hostMid: selectedUP)
             items = data.items
+            BiliImages.prefetchDynamic(data.items)
             offset = data.offset
             hasMore = data.hasMore ?? false
             hasLoaded = true
@@ -256,13 +257,13 @@ struct DynamicCardView: View {
             Group {
                 if let mid = item.modules.moduleAuthor?.mid {
                     NavigationLink(value: UpRoute(mid: mid)) {
-                        RemoteImage(url: Formatters.https(item.modules.moduleAuthor?.face ?? ""))
+                        RemoteImage(url: Formatters.https(item.modules.moduleAuthor?.face ?? ""), variant: .avatar)
                             .frame(width: 36, height: 36)
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
                 } else {
-                    RemoteImage(url: Formatters.https(item.modules.moduleAuthor?.face ?? ""))
+                    RemoteImage(url: Formatters.https(item.modules.moduleAuthor?.face ?? ""), variant: .avatar)
                         .frame(width: 36, height: 36)
                         .clipShape(Circle())
                 }
@@ -374,7 +375,7 @@ struct DynamicQuoteView: View {
     private var quoteBox: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                RemoteImage(url: Formatters.https(origin.modules?.moduleAuthor?.face ?? ""))
+                RemoteImage(url: Formatters.https(origin.modules?.moduleAuthor?.face ?? ""), variant: .avatar)
                     .frame(width: 22, height: 22)
                     .clipShape(Circle())
                 Text(origin.modules?.moduleAuthor?.name ?? "未知用户")
@@ -445,7 +446,7 @@ struct DynamicArchiveRow: View {
 
     private var rowContent: some View {
         HStack(spacing: 10) {
-            RemoteImage(url: Formatters.https(archive.cover ?? ""))
+            RemoteImage(url: Formatters.https(archive.cover ?? ""), variant: .card)
                 .frame(width: 128, height: 76)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
@@ -507,7 +508,7 @@ struct DynamicImageTile: View {
         Color.clear
             .aspectRatio(1, contentMode: .fit)
             .overlay {
-                RemoteImage(url: url)
+                RemoteImage(url: url, variant: .keepAspect)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
             }

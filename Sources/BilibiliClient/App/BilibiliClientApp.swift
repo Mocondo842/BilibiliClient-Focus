@@ -11,6 +11,8 @@ struct BilibiliClientApp: App {
         // 适中的内存/磁盘图片缓存：兼顾列表滚动流畅度与低配机器的内存占用
         URLCache.shared = URLCache(memoryCapacity: 8 * 1024 * 1024,
                                    diskCapacity: 128 * 1024 * 1024)
+        // 图片管线：后台解码 + 两级缓存 + 预取（见 BiliImages）
+        BiliImages.install()
     }
 
     var body: some Scene {

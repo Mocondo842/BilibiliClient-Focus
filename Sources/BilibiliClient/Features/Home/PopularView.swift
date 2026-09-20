@@ -88,6 +88,7 @@ struct PopularView: View {
         do {
             let data = try await HomeService().popular(page: 1, pageSize: 20)
             videos = data.list
+            BiliImages.prefetch(data.list.map(\.pic), variant: .card)
             page = 1
             hasMore = !(data.noMore ?? false)
             hasLoaded = true

@@ -17,13 +17,13 @@ struct CommentCardView: View {
                 Group {
                     if let mid = Int(comment.member?.mid ?? "") {
                         NavigationLink(value: UpRoute(mid: mid)) {
-                            RemoteImage(url: Formatters.https(comment.member?.avatar ?? ""))
+                            RemoteImage(url: Formatters.https(comment.member?.avatar ?? ""), variant: .avatar)
                                 .frame(width: 32, height: 32)
                                 .clipShape(Circle())
                         }
                         .buttonStyle(.plain)
                     } else {
-                        RemoteImage(url: Formatters.https(comment.member?.avatar ?? ""))
+                        RemoteImage(url: Formatters.https(comment.member?.avatar ?? ""), variant: .avatar)
                             .frame(width: 32, height: 32)
                             .clipShape(Circle())
                     }
@@ -161,7 +161,7 @@ struct ReplyRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            RemoteImage(url: Formatters.https(reply.member?.avatar ?? ""))
+            RemoteImage(url: Formatters.https(reply.member?.avatar ?? ""), variant: .avatar)
                 .frame(width: 24, height: 24)
                 .clipShape(Circle())
 

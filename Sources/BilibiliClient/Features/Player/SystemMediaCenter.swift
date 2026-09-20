@@ -110,8 +110,14 @@ final class SystemMediaCenter {
 
     private func loadArtwork(_ url: URL) {
         Task { @MainActor in
-            guard let (data, _) = try? await URLSession.shared.data(from: url),
-                  let image = NSImage(data: data) else { return }
+            // 系统"正在播放"的封面只有几百像素，走图床尺寸后缀，别下整张原图
+            let sized = Formatters.sized(url, .card) ?? url
+            let image: NSImage? = await withCheckedContinuation { continuation in
+                BiliImages.pipeline.loadImage(with: sized) { result in
+                    continuation.resume(returning: try? result.get().image)
+                }
+            }
+            guard let image else { return }
             artwork = MPMediaItemArtwork(boundsSize: NSSize(width: 512, height: 512)) { _ in image }
             syncNowPlaying(force: true)
         }

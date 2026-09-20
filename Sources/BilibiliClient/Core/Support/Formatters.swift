@@ -40,6 +40,52 @@ enum Formatters {
         return URL(string: value)
     }
 
+    // MARK: - 图床尺寸后缀
+
+    /// 图片用途：决定向 B 站图床请求多大的图（服务端缩好再下发）。
+    enum ImageVariant {
+        /// 头像（正方形）
+        case avatar
+        /// 16:9 封面（列表卡片、直播封面）
+        case card
+        /// 大图 16:9（播放页、详情页大图）
+        case detail
+        /// 宽高比不确定的图（动态配图）：只约束宽度、不裁剪
+        case keepAspect
+
+        var suffix: String? {
+            switch self {
+            case .avatar: return "@144w_144h_1c.webp"
+            case .card: return "@672w_378h_1c.webp"
+            case .detail: return "@1280w_720h_1c.webp"
+            case .keepAspect: return "@960w.webp"
+            }
+        }
+    }
+
+    /// 给 B 站图床（*.hdslb.com）的地址加上尺寸/格式后缀。
+    ///
+    /// 服务端会直接返回缩好的 WebP：实测热门封面 395KB → 26KB（省 93%）、
+    /// 头像 60KB → 2.8KB，解码后的内存也小一个数量级。
+    /// 非图床域名、或地址本身已经带后缀时原样返回。
+    static func sized(_ url: URL?, _ variant: ImageVariant) -> URL? {
+        guard let url, let suffix = variant.suffix else { return url }
+        guard let host = url.host?.lowercased(), host.hasSuffix("hdslb.com") else { return url }
+        // 动图不转静态 WebP（后缀会把 gif 变成一张静帧）
+        guard !url.path.lowercased().hasSuffix(".gif") else { return url }
+        var text = url.absoluteString
+        // 已经带过 @ 后缀（如接口返回的 @320w）就不要重复拼
+        if let mark = text.lastIndex(of: "@"), !text[text.index(after: mark)...].isEmpty {
+            return url
+        }
+        if let queryStart = text.firstIndex(of: "?") {
+            text.insert(contentsOf: suffix, at: queryStart)
+        } else {
+            text += suffix
+        }
+        return URL(string: text) ?? url
+    }
+
     /// 定点小数格式化（规避部分环境下 String(format:) 失效的问题）。
     static func decimal(_ value: Double, fractionDigits: Int = 1) -> String {
         let formatter = NumberFormatter()

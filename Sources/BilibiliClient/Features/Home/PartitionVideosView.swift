@@ -75,6 +75,7 @@ struct PartitionVideosView: View {
         do {
             let data = try await HomeService().ranking(rid: zone.id, type: "all")
             videos = data.list
+            BiliImages.prefetch(data.list.map(\.pic), variant: .card)
         } catch {
             errorMessage = error.localizedDescription
         }

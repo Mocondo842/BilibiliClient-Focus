@@ -198,6 +198,7 @@ struct FavoritesView: View {
         do {
             let data = try await LibraryService().favoriteResources(mediaId: mediaId, page: 1)
             medias = data.medias
+            BiliImages.prefetch(data.medias.map { $0.cover }, variant: .card)
             page = 1
             hasMore = data.hasMore ?? false
         } catch {

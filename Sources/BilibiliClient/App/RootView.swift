@@ -215,7 +215,7 @@ struct RootView: View {
     }
 
     private func avatar(url: String, size: CGFloat) -> some View {
-        RemoteImage(url: Formatters.https(url))
+        RemoteImage(url: Formatters.https(url), variant: .avatar)
             .frame(width: size, height: size)
             .clipShape(Circle())
     }
