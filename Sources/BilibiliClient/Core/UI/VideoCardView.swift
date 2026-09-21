@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftUIX
 
 /// 首页卡片（推荐/热门/分区排行通用），支持右上角排行序号。
 struct VideoCardView: View {
@@ -87,7 +88,7 @@ struct VideoCardView: View {
                     .padding(6)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .cornerRadius(12, style: .circular)
     }
 
     private func rankColor(_ rank: Int) -> Color {

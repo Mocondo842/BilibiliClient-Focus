@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftUIX
 
 struct DynamicFeedView: View {
     @EnvironmentObject private var session: SessionStore
@@ -286,9 +287,7 @@ struct DynamicCardView: View {
     private var cardBody: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let text = dynamicText, !text.isEmpty {
-                Text(text)
-                    .font(.callout)
-                    .lineSpacing(2)
+                RichText(text: text, font: .callout, lineSpacing: 2)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -384,8 +383,7 @@ struct DynamicQuoteView: View {
             }
 
             if let text = quotedText, !text.isEmpty {
-                Text(text)
-                    .font(.callout)
+                RichText(text: text, font: .callout, selectable: false)
                     .foregroundStyle(.secondary)
                     .lineLimit(6)
                     .fixedSize(horizontal: false, vertical: true)
@@ -448,7 +446,7 @@ struct DynamicArchiveRow: View {
         HStack(spacing: 10) {
             RemoteImage(url: Formatters.https(archive.cover ?? ""), variant: .card)
                 .frame(width: 128, height: 76)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .cornerRadius(8, style: .circular)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(archive.title ?? "")
@@ -512,7 +510,7 @@ struct DynamicImageTile: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
             }
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .cornerRadius(cornerRadius, style: .circular)
     }
 }
 

@@ -1,6 +1,7 @@
 import AVFoundation
 import AVKit
 import SwiftUI
+import SwiftUIX
 
 /// 播放画面：直接使用系统 `AVPlayerView`。
 ///
@@ -76,7 +77,8 @@ final class DanmakuPlayerView: AVPlayerView {
     private var danmakuSettings: DanmakuSettings?
     private var attachScheduled = false
 
-    private var keyMonitor: Any?
+    /// SwiftUIX 的事件监听：start/stop 生命周自带，不用自己 add/remove 本地监视器
+    private var keyMonitor: NSEventMonitor?
     private var itemStatusObservation: NSKeyValueObservation?
     private var itemDurationObservation: NSKeyValueObservation?
     /// 当前已装 KVO 的播放项：同一个 item 不重复安装
@@ -91,7 +93,7 @@ final class DanmakuPlayerView: AVPlayerView {
 
     deinit {
         holdTask?.cancel()
-        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor?.stop()
         itemStatusObservation?.invalidate()
         itemDurationObservation?.invalidate()
     }
@@ -212,16 +214,16 @@ final class DanmakuPlayerView: AVPlayerView {
         } else {
             PlaybackMenuState.shared.detachPlayerView(self)
         }
-        if let keyMonitor {
-            NSEvent.removeMonitor(keyMonitor)
-            self.keyMonitor = nil
-        }
+        keyMonitor?.stop()
+        keyMonitor = nil
         cancelHold()
         guard window != nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+        // 本地键盘监听（空格 / ← / →）：返回 nil 表示吞掉事件，交回原事件则继续分发
+        keyMonitor = NSEventMonitor(context: .local, matching: [.keyDown, .keyUp]) { [weak self] event in
             guard let self, self.handleKey(event) else { return event }
             return nil
         }
+        keyMonitor?.start()
     }
 
     /// 返回 true 表示事件已被播放器消费。

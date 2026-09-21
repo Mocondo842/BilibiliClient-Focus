@@ -92,24 +92,30 @@ final class APIClient {
             request.setValue(effectiveCookieHeader, forHTTPHeaderField: "Cookie")
         }
 
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else { throw APIError.http(http.statusCode) }
-
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-
+        let started = Date()
         do {
-            let envelope = try decoder.decode(BiliEnvelope<T>.self, from: data)
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+            guard (200..<300).contains(http.statusCode) else { throw APIError.http(http.statusCode) }
+
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+            let envelope: BiliEnvelope<T>
+            do {
+                envelope = try decoder.decode(BiliEnvelope<T>.self, from: data)
+            } catch {
+                throw APIError.decoding("\(error)")
+            }
             guard envelope.code == 0 else {
                 throw APIError.biz(code: envelope.code, message: envelope.message)
             }
             guard let payload = envelope.data else { throw APIError.invalidResponse }
+            Self.logRequest(path, started: started, status: http.statusCode)
             return payload
-        } catch let error as APIError {
-            throw error
         } catch {
-            throw APIError.decoding("\(error)")
+            Self.logRequest(path, started: started, error: error)
+            throw error
         }
     }
 
@@ -126,21 +132,23 @@ final class APIClient {
         if !effectiveCookieHeader.isEmpty {
             request.setValue(effectiveCookieHeader, forHTTPHeaderField: "Cookie")
         }
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else { throw APIError.http(http.statusCode) }
-        return (data, http)
+        let started = Date()
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+            guard (200..<300).contains(http.statusCode) else { throw APIError.http(http.statusCode) }
+            Self.logRequest(path, started: started, status: http.statusCode)
+            return (data, http)
+        } catch {
+            Self.logRequest(path, started: started, error: error)
+            throw error
+        }
     }
 
     /// POST 表单请求（用于观看进度上报等），只校验 code/message。
     func postForm(path: String,
                   base: URL = APIConstants.apiBase,
                   form: [String: String]) async throws {
-        struct EmptyEnvelope: Decodable {
-            let code: Int
-            let message: String
-        }
-
         var request = URLRequest(url: base.appendingPathComponent(path))
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
@@ -156,14 +164,13 @@ final class APIClient {
             request.setValue(effectiveCookieHeader, forHTTPHeaderField: "Cookie")
         }
 
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else { throw APIError.http(http.statusCode) }
-
-        let decoder = JSONDecoder()
-        let envelope = try decoder.decode(EmptyEnvelope.self, from: data)
-        guard envelope.code == 0 else {
-            throw APIError.biz(code: envelope.code, message: envelope.message)
+        let started = Date()
+        do {
+            let status = try await Self.expectSuccess(request, on: session)
+            Self.logRequest(path, started: started, status: status)
+        } catch {
+            Self.logRequest(path, started: started, error: error)
+            throw error
         }
     }
 
@@ -172,11 +179,6 @@ final class APIClient {
                   base: URL = APIConstants.apiBase,
                   json: [String: Any],
                   query: [String: String] = [:]) async throws {
-        struct EmptyEnvelope: Decodable {
-            let code: Int
-            let message: String
-        }
-
         var components = URLComponents(url: base.appendingPathComponent(path),
                                        resolvingAgainstBaseURL: false)!
         if !query.isEmpty {
@@ -195,6 +197,23 @@ final class APIClient {
             request.setValue(effectiveCookieHeader, forHTTPHeaderField: "Cookie")
         }
 
+        let started = Date()
+        do {
+            let status = try await Self.expectSuccess(request, on: session)
+            Self.logRequest(path, started: started, status: status)
+        } catch {
+            Self.logRequest(path, started: started, error: error)
+            throw error
+        }
+    }
+
+    /// POST 类请求共用的收尾：校验 HTTP 状态与 envelope 里的 `code`，返回 HTTP 状态码供日志记录。
+    private static func expectSuccess(_ request: URLRequest, on session: URLSession) async throws -> Int {
+        struct EmptyEnvelope: Decodable {
+            let code: Int
+            let message: String
+        }
+
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else { throw APIError.http(http.statusCode) }
@@ -204,6 +223,39 @@ final class APIClient {
         guard envelope.code == 0 else {
             throw APIError.biz(code: envelope.code, message: envelope.message)
         }
+        return http.statusCode
+    }
+
+    /// 请求日志：成功走 `.debug`（release 下默认不落盘），失败走 `.error`。
+    /// 只记路径，不记带 WBI 签名和 access_key 的完整 URL。
+    private static func logRequest(_ path: String,
+                                   started: Date,
+                                   status: Int? = nil,
+                                   error: Error? = nil) {
+        let ms = Int(Date().timeIntervalSince(started) * 1000)
+        guard let error else {
+            AppLog.network.debug("请求完成", metadata: ["path": "\(path)", "ms": "\(ms)", "status": "\(status ?? 0)"])
+            return
+        }
+        // 取消是页面切换、任务作废的常规结果，不是故障；压到 debug 免得淹没真正的失败。
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            AppLog.network.debug("请求取消", metadata: ["path": "\(path)", "ms": "\(ms)"])
+        } else {
+            AppLog.network.error("请求失败", metadata: ["path": "\(path)", "ms": "\(ms)", "error": "\(describe(error))"])
+        }
+    }
+
+    /// 错误的简短描述。不能直接用 `"\(error)"`——`URLError` 的 userInfo 里带着
+    /// 完整 URL（含 WBI 签名与查询参数），那些不该进日志。
+    private static func describe(_ error: Error) -> String {
+        if let apiError = error as? APIError {
+            return apiError.errorDescription ?? "APIError"
+        }
+        if let urlError = error as? URLError {
+            return "URLError(\(urlError.code.rawValue)) \(urlError.localizedDescription)"
+        }
+        let nsError = error as NSError
+        return "\(nsError.domain)#\(nsError.code)"
     }
 
     private static func encodeFormValue(_ value: String) -> String {

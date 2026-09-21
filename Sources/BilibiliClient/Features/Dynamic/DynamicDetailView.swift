@@ -47,10 +47,7 @@ struct DynamicDetailView: View {
             VStack(alignment: .leading, spacing: 18) {
                 authorHeader(item)
                 if let text = mainText(item), !text.isEmpty {
-                    Text(text)
-                        .font(.body)
-                        .lineSpacing(3)
-                        .textSelection(.enabled)
+                    RichText(text: text, font: .body, lineSpacing: 3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 

@@ -219,11 +219,9 @@ struct VideoDetailView: View {
                     Divider()
 
                     Text("简介").font(.headline)
-                    Text(view.desc.isEmpty ? "该视频没有简介" : view.desc)
-                        .font(.callout)
+                    RichText(text: view.desc.isEmpty ? "该视频没有简介" : view.desc,
+                             font: .callout, lineSpacing: 4)
                         .foregroundStyle(.secondary)
-                        .lineSpacing(4)
-                        .textSelection(.enabled)
 
                     if !tags.isEmpty {
                         FlowLayout(spacing: 8) {

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bilibili Client 自动更新源（Sparkle）。
+     空 feed：表示目前没有可用更新。发布新版本时用
+       ./scripts/release.sh <version> --publish
+     重新生成这个文件（含 EdDSA 签名）并提交。 -->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+    <channel>
+        <title>Bilibili Client</title>
+        <description>Bilibili Client 更新源</description>
+        <language>zh-CN</language>
+    </channel>
+</rss>

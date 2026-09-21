@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftUIX
 
 struct MediaListRow: View {
     let coverURL: String
@@ -12,7 +13,7 @@ struct MediaListRow: View {
             ZStack(alignment: .bottomTrailing) {
                 RemoteImage(url: Formatters.https(coverURL), variant: .card)
                     .frame(width: 132, height: 78)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .cornerRadius(10, style: .circular)
                 if let durationText {
                     Text(durationText)
                         .font(.caption2.weight(.semibold))

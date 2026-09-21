@@ -8,6 +8,9 @@ struct BilibiliClientApp: App {
     @StateObject private var router = AppRouter.shared
 
     init() {
+        // 日志后端必须在任何 AppLog 调用之前装好
+        AppLog.bootstrap()
+        AppLog.app.info("启动", metadata: ["version": "\(BuildInfo.version)", "build": "\(BuildInfo.build)"])
         // 适中的内存/磁盘图片缓存：兼顾列表滚动流畅度与低配机器的内存占用
         URLCache.shared = URLCache(memoryCapacity: 8 * 1024 * 1024,
                                    diskCapacity: 128 * 1024 * 1024)
@@ -27,6 +30,28 @@ struct BilibiliClientApp: App {
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1280, height: 860)
         .commands { PlaybackCommands() }
+        .commands { UpdaterCommands() }
+
+        // 菜单栏图标（关掉主窗口后的唯一入口）：系统 MenuBarExtra 接替手写的
+        // NSStatusItem + NSPopover —— 开合、点击外部收起、阴影与材质都交给系统。
+        MenuBarExtra {
+            MenuBarPanelView(session: SessionStore.shared, router: AppRouter.shared)
+                .environmentObject(SessionStore.shared)
+        } label: {
+            Image(systemName: "play.rectangle.fill")
+        }
+        .menuBarExtraStyle(.window)
+    }
+}
+
+/// 应用菜单里的"检查更新…"（放在"关于"之后，与 macOS 惯例一致）
+struct UpdaterCommands: Commands {
+    var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button("检查更新…") {
+                UpdaterController.shared.checkForUpdates()
+            }
+        }
     }
 }
 
@@ -66,7 +91,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// 供 RootView 将主窗口代理绑定到本对象。
     static weak var shared: AppDelegate?
 
-    private var menuBar: MenuBarController?
 
     /// 主窗口（Scene id “main”）。只有它套用“关闭窗口”行为；
     /// 分离播放窗口、菜单栏面板、AVKit 自建的全屏窗口都不接管。
@@ -117,9 +141,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApplication.shared.setActivationPolicy(.regular)
         // 系统媒体键（F7 后退 / F8 播放暂停 / F9 前进）与“正在播放”上报
         SystemMediaCenter.shared.install()
-        let menuBar = MenuBarController()
-        menuBar.install()
-        self.menuBar = menuBar
         NSApplication.shared.activate(ignoringOtherApps: true)
 
         // SwiftUI 可能在创建窗口后接管 delegate，这里监听窗口成为主/关键窗口，

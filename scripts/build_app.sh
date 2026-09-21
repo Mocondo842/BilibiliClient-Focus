@@ -57,6 +57,18 @@ cp ".build/$CONFIG/$APP_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
 if [ "$CONFIG" = "release" ]; then
   strip -x "$APP_DIR/Contents/MacOS/$APP_NAME" 2>/dev/null || true
 fi
+
+# SwiftPM 的二进制依赖（Sparkle.framework）不会自动进 .app：手动嵌入 + 补 rpath。
+# rpath 必须在签名之前加，否则会破坏签名。
+SPARKLE_SRC=".build/$CONFIG/Sparkle.framework"
+if [ -d "$SPARKLE_SRC" ]; then
+  mkdir -p "$APP_DIR/Contents/Frameworks"
+  ditto "$SPARKLE_SRC" "$APP_DIR/Contents/Frameworks/Sparkle.framework"
+  if ! otool -l "$APP_DIR/Contents/MacOS/$APP_NAME" | grep -q "@executable_path/../Frameworks"; then
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_DIR/Contents/MacOS/$APP_NAME"
+  fi
+  echo "Embedded: Sparkle.framework"
+fi
 # 使用 Icon Composer 原生资源编译流程，保留 macOS 26 的分层、明暗和材质效果。
 ICON_BUILD_DIR="$(mktemp -d)"
 "$ACTOOL" --compile "$ICON_BUILD_DIR" \
@@ -67,6 +79,19 @@ ICON_BUILD_DIR="$(mktemp -d)"
   "$ICON_SOURCE" >/dev/null
 test -f "$ICON_BUILD_DIR/Assets.car"
 cp "$ICON_BUILD_DIR/Assets.car" "$APP_DIR/Contents/Resources/Assets.car"
+
+# 自动更新（Sparkle）：feed 地址与公钥。SPARKLE_FEED_URL 可用环境变量覆盖，
+# 便于本地起一个 http 服务做端到端演示（本地地址会自动放开 ATS 本地网络限制）。
+SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://raw.githubusercontent.com/Mora-han/BilibiliClient/main/docs/appcast.xml}"
+SPARKLE_PUBLIC_KEY="${SPARKLE_PUBLIC_KEY:-9cFE7AG3SzRLHsDfRsNHfPJeJ8Za/oH6Yrz4kYGoUwQ=}"
+SPARKLE_ATS=""
+case "$SPARKLE_FEED_URL" in
+  *127.0.0.1*|*localhost*) SPARKLE_ATS='    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>' ;;
+esac
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -100,6 +125,16 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <!-- 自动更新：appcast 地址、EdDSA 公钥、自动检查 -->
+    <key>SUFeedURL</key>
+    <string>${SPARKLE_FEED_URL}</string>
+    <key>SUPublicEDKey</key>
+    <string>${SPARKLE_PUBLIC_KEY}</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
+${SPARKLE_ATS}
 </dict>
 </plist>
 PLIST
@@ -116,6 +151,10 @@ if [ -z "${SIGN_IDENTITY:-}" ]; then
     | head -1 | tr -d '"')"
 fi
 if [ -n "$SIGN_IDENTITY" ]; then
+  # 嵌套代码（Sparkle.framework 及其 XPC/Helper）必须先签，再签外层 .app
+  if [ -d "$APP_DIR/Contents/Frameworks" ]; then
+    codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_DIR/Contents/Frameworks/Sparkle.framework" 2>/dev/null || true
+  fi
   codesign --force --sign "$SIGN_IDENTITY" "$APP_DIR" 2>/dev/null \
     || codesign --force --sign - "$APP_DIR" 2>/dev/null || true
   echo "Signed with: $SIGN_IDENTITY"

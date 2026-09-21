@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftUIX
 
 /// 直播页：热门/推荐直播的卡片流，布局与首页视频卡片一致
 /// （可切换卡片 / 列表模式），点击进入直播间。
@@ -193,6 +194,6 @@ struct LiveCardView: View {
             .foregroundStyle(.white)
             .padding(6)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .cornerRadius(12, style: .circular)
     }
 }

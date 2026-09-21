@@ -1,3 +1,4 @@
+import Collections
 import Foundation
 import zlib
 
@@ -21,7 +22,7 @@ struct LiveDanmakuMessage: Identifiable, Equatable {
 @MainActor
 final class LiveDanmakuEngine: ObservableObject {
     /// 实时消息（新消息追加在末尾，超出上限裁掉最旧的）
-    @Published private(set) var messages: [LiveDanmakuMessage] = []
+    @Published private(set) var messages: Deque<LiveDanmakuMessage> = []
     /// 弹幕服务器连接状态（认证成功后为 true）
     @Published private(set) var connected = false
     /// 连接失败 / 被服务端断开的原因（nil = 正常）
@@ -44,7 +45,7 @@ final class LiveDanmakuEngine: ObservableObject {
     private var nextID = 1
     private var lastFlushSecond = Date().timeIntervalSince1970
     private var flushCount = 0
-    private var pending: [LiveDanmakuMessage] = []
+    private var pending: Deque<LiveDanmakuMessage> = []
     private let maxMessages = 400
     /// 高热度直播间每秒最多渲染 80 条，超出丢弃，保证界面流畅
     private let maxPerSecond = 80
@@ -70,6 +71,7 @@ final class LiveDanmakuEngine: ObservableObject {
             guard let token = conf.token,
                   let host = conf.hostServerList?.first(where: { !($0.host ?? "").isEmpty }) ?? firstHost(from: conf),
                   let hostname = host.host else {
+                AppLog.live.error("弹幕服务器配置不可用", metadata: ["roomId": "\(roomId)"])
                 errorText = "弹幕服务器配置不可用"
                 return
             }
@@ -78,6 +80,7 @@ final class LiveDanmakuEngine: ObservableObject {
                                  token: token)
         } catch {
             guard gen == generation else { return }
+            AppLog.live.error("连接弹幕服务器失败", metadata: ["roomId": "\(roomId)", "error": "\(error)"])
             errorText = error.localizedDescription
         }
     }
@@ -89,6 +92,7 @@ final class LiveDanmakuEngine: ObservableObject {
 
     /// 断开连接并清理（页面退出时调用）。
     func disconnect() {
+        AppLog.live.info("断开弹幕连接", metadata: ["roomId": "\(roomId)"])
         generation += 1
         connecting = false
         reconnectAttempts = 0
@@ -122,6 +126,7 @@ final class LiveDanmakuEngine: ObservableObject {
         let task = session.webSocketTask(with: request)
         self.task = task
         task.resume()
+        AppLog.live.info("已建立弹幕连接", metadata: ["host": "\(hostname)", "port": "\(port)"])
 
         let auth = Self.packet(op: 7, protover: 1,
                                body: Data(authBody(roomId: roomId, token: token).utf8))
@@ -148,6 +153,7 @@ final class LiveDanmakuEngine: ObservableObject {
                         break
                     }
                 } catch {
+                    AppLog.live.info("接收循环结束", metadata: ["error": "\(error)"])
                     break
                 }
             }
@@ -163,6 +169,7 @@ final class LiveDanmakuEngine: ObservableObject {
     private func scheduleReconnect() {
         guard reconnectTask == nil, reconnectAttempts < 3 else { return }
         reconnectAttempts += 1
+        AppLog.live.notice("弹幕连接断开，准备重连", metadata: ["attempt": "\(reconnectAttempts)"])
         errorText = "弹幕连接已断开，正在重连…"
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(3))
@@ -218,10 +225,12 @@ final class LiveDanmakuEngine: ObservableObject {
         case 8: // 认证回复
             let code = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
             if code?["code"] as? Int == 0 || code == nil {
+                AppLog.live.info("弹幕认证通过", metadata: ["roomId": "\(roomId)"])
                 connected = true
                 reconnectAttempts = 0
                 errorText = nil
             } else {
+                AppLog.live.error("弹幕认证失败", metadata: ["roomId": "\(roomId)", "code": "\(code?["code"] ?? "nil")"])
                 connected = false
                 errorText = "弹幕连接认证失败"
             }
@@ -234,12 +243,14 @@ final class LiveDanmakuEngine: ObservableObject {
             case 2, 3:
                 if let inflated = Self.inflate(body) {
                     parsePackets(inflated)
+                } else {
+                    AppLog.live.error("弹幕数据解压失败", metadata: ["proto": "\(proto)", "bytes": "\(body.count)"])
                 }
             default:
-                break
+                AppLog.live.debug("忽略未知协议版本", metadata: ["proto": "\(proto)", "op": "\(op)"])
             }
         default:
-            break
+            AppLog.live.debug("忽略未知 opcode", metadata: ["op": "\(op)"])
         }
     }
 
@@ -305,6 +316,7 @@ final class LiveDanmakuEngine: ObservableObject {
         guard !pending.isEmpty else { return }
         let room = maxPerSecond - flushCount
         guard room > 0 else {
+            AppLog.live.debug("弹幕超过每秒上限，丢弃本批", metadata: ["dropped": "\(pending.count)"])
             pending.removeAll(keepingCapacity: true)
             return
         }
@@ -420,4 +432,3 @@ final class LiveDanmakuEngine: ObservableObject {
         return (result == Z_STREAM_END || result == Z_OK) && !output.isEmpty ? output : nil
     }
 }
-

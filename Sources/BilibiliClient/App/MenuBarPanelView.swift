@@ -1,11 +1,10 @@
 import SwiftUI
+import SwiftUIX
 
 /// 菜单栏弹出的卡片：顶部用户信息，下方单列动态流，点击视频跳转主界面。
 struct MenuBarPanelView: View {
     @ObservedObject var session: SessionStore
     @ObservedObject var router: AppRouter
-    var onOpenVideo: (String) -> Void = { _ in }
-    var onOpenApp: () -> Void = {}
 
     @State private var items: [DynamicItem] = []
     @State private var offset: String?
@@ -81,7 +80,7 @@ struct MenuBarPanelView: View {
             .help(session.loggedIn ? "刷新动态" : "扫码登录")
 
             Button {
-                onOpenApp()
+                router.openMain()
             } label: {
                 Image(systemName: "macwindow")
                     .font(.callout)
@@ -123,7 +122,7 @@ struct MenuBarPanelView: View {
                     LazyVStack(spacing: 0) {
                         ForEach(items) { item in
                             MenuBarDynamicRow(item: item) { bvid in
-                                onOpenVideo(bvid)
+                                router.openVideo(bvid)
                             }
                             Divider()
                                 .padding(.leading, 56)
@@ -225,7 +224,7 @@ private struct MenuBarDynamicRow: View {
                     HStack(spacing: 10) {
                         RemoteImage(url: Formatters.https(archive.cover ?? ""), variant: .card)
                             .frame(width: 108, height: 62)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .cornerRadius(8, style: .circular)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(archive.title ?? "")
                                 .font(.callout.weight(.medium))

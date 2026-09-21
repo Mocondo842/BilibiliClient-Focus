@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftUIX
 
 /// 全局内容卡片背景，样式由设置项“卡片样式”控制：
 /// - 液态玻璃：系统 glassEffect 材质
@@ -24,7 +25,7 @@ struct CardBackground: ViewModifier {
                 .fill(.white.opacity(0.05))
                 .glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
         }
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        .cornerRadius(cornerRadius, style: .circular)
     }
 
     @ViewBuilder
@@ -37,7 +38,7 @@ struct CardBackground: ViewModifier {
                         .strokeBorder(.primary.opacity(0.12), lineWidth: 1)
                 )
         }
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        .cornerRadius(cornerRadius, style: .circular)
     }
 }
 

@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUIX
 import MediaPlayer
 
 /// 系统媒体键与“正在播放”集成：
@@ -18,7 +19,8 @@ final class SystemMediaCenter {
     private var artwork: MPMediaItemArtwork?
     private var lastProgressPush = Date.distantPast
     private var installed = false
-    private var eventMonitor: Any?
+    /// SwiftUIX 的事件监听（F7/F8/F9 以普通按键事件到达时）
+    private var eventMonitor: NSEventMonitor?
     private var resignObserver: NSObjectProtocol?
 
     /// F9 长按 2x 快进（仅“标准功能键”模式下的 keyDown/keyUp 路径）
@@ -195,7 +197,8 @@ final class SystemMediaCenter {
     // MARK: - 标准功能键模式（F7/F8/F9 作为普通按键事件到达时）
 
     private func installFunctionKeyMonitor() {
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+        eventMonitor?.stop()
+        eventMonitor = NSEventMonitor(context: .local, matching: [.keyDown, .keyUp]) { [weak self] event in
             guard let self else { return event }
             let modifiers = event.modifierFlags.intersection([.command, .option, .control])
             guard modifiers.isEmpty else { return event }
@@ -208,6 +211,7 @@ final class SystemMediaCenter {
             }
             return handled ? nil : event
         }
+        eventMonitor?.start()
     }
 
     /// 返回是否已消费该按键事件；消费时监视器吞掉事件，避免继续向下分发。

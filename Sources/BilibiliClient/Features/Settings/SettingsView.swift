@@ -266,6 +266,38 @@ struct SettingsView: View {
                 }
                 .font(.caption)
             }
+            Divider()
+            updateRows
+        }
+    }
+
+    /// 自动更新（Sparkle）：开关 + 手动检查
+    @ViewBuilder
+    private var updateRows: some View {
+        Toggle("自动检查更新", isOn: Binding(
+            get: { UpdaterController.shared.automaticallyChecksForUpdates },
+            set: { UpdaterController.shared.automaticallyChecksForUpdates = $0 }
+        ))
+        .font(.body)
+
+        Toggle("自动下载并安装", isOn: Binding(
+            get: { UpdaterController.shared.automaticallyDownloadsUpdates },
+            set: { UpdaterController.shared.automaticallyDownloadsUpdates = $0 }
+        ))
+        .font(.body)
+        .disabled(!UpdaterController.shared.automaticallyChecksForUpdates)
+
+        optionRow("版本更新") {
+            Button("检查更新…") {
+                UpdaterController.shared.checkForUpdates()
+            }
+            .disabled(!UpdaterController.shared.canCheckForUpdates)
+        }
+
+        if let last = UpdaterController.shared.lastUpdateCheckDate {
+            Text("上次检查：\(last.formatted(date: .abbreviated, time: .shortened))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 

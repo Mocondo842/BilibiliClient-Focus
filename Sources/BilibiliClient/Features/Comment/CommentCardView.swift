@@ -47,9 +47,7 @@ struct CommentCardView: View {
                         }
                     }
 
-                    Text(comment.content?.message ?? "")
-                        .font(.callout)
-                        .textSelection(.enabled)
+                    RichText(text: comment.content?.message ?? "", font: .callout)
 
                     HStack(spacing: 14) {
                         Text(Formatters.timeAgo(comment.ctime ?? 0))
@@ -178,9 +176,7 @@ struct ReplyRowView: View {
                     Spacer()
                 }
 
-                Text(reply.content?.message ?? "")
-                    .font(.caption)
-                    .textSelection(.enabled)
+                RichText(text: reply.content?.message ?? "", font: .caption)
 
                 HStack(spacing: 10) {
                     Text(Formatters.timeAgo(reply.ctime ?? 0))
