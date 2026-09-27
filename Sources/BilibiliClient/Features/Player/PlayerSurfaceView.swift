@@ -1,7 +1,6 @@
 import AVFoundation
 import AVKit
 import SwiftUI
-import SwiftUIX
 
 /// 播放画面：系统 `AVPlayerView` 只负责画面与全屏（含全屏动画），
 /// 播放控件改为自绘的液态玻璃控制栏（`PlayerControlBar`）。

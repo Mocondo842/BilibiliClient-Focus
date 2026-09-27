@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftUIX
 
 /// 全局内容卡片背景，样式由设置项“卡片样式”控制：
 /// - 液态玻璃：系统 glassEffect 材质

@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUIX
 import MediaPlayer
 
 /// 系统媒体键与“正在播放”集成：

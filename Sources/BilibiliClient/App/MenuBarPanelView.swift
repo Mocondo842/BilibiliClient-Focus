@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftUIX
 
 /// 菜单栏弹出的卡片：顶部用户信息，下方单列动态流，点击视频跳转主界面。
 struct MenuBarPanelView: View {

@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftUIX
 
 struct MediaListRow: View {
     let coverURL: String
