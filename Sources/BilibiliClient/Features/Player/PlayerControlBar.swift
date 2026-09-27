@@ -57,6 +57,8 @@ final class PlayerBarModel: ObservableObject {
     @Published private(set) var isScrubbing = false
     @Published private(set) var scrubPreview: Double?
     @Published private(set) var isBarVisible = true
+    /// 弹幕设置弹层打开中：控制栏不自动收起
+    @Published private(set) var isPanelOpen = false
 
     static let speedOptions: [Float] = [0.5, 0.75, 1, 1.25, 1.5, 2]
     /// 鼠标不动多久后收起控制栏（播放中才收）
@@ -169,8 +171,14 @@ final class PlayerBarModel: ObservableObject {
         if hovering { pokeActivity() }
     }
 
+    /// 弹幕设置弹层开合：打开期间控制栏保持可见
+    func setPanelOpen(_ open: Bool) {
+        isPanelOpen = open
+        pokeActivity()
+    }
+
     private func hideIfIdle() {
-        guard isPlaying, !isScrubbing, !hoveringBar else { return }
+        guard isPlaying, !isScrubbing, !hoveringBar, !isPanelOpen else { return }
         isBarVisible = false
     }
 
@@ -263,97 +271,137 @@ final class PlayerBarModel: ObservableObject {
 
 // MARK: - 控制栏 UI
 
-/// 自绘播放控制栏：一条液态玻璃胶囊，悬停/移动鼠标时浮现，播放中闲置 2.5s 自动收起。
+/// 自绘播放控制栏：液态玻璃胶囊，两层布局——顶部一整排是进度，下面一排是按钮。
+/// 悬停/移动鼠标时浮现，播放中闲置 2.5s 自动收起（弹幕设置打开时保持可见）。
 ///
-/// 内容按"简洁优先"取舍：播放/暂停 · 进度+时间 · 倍速 · 音量 · 弹幕 · 画质 · 画中画 · 全屏。
-/// 直播没有时间轴，进度区换成"直播"徽标。
+/// 内容按"简洁优先"取舍：播放/暂停 · 倍速 · 音量 · 弹幕开关 · 弹幕设置 · 画质 · 画中画 · 全屏。
+/// 直播没有时间轴，进度排整体不显示，按钮排里换成"直播"徽标。
+/// 外观恒定深色：白天不刺眼，深浅两种系统外观下观感一致。
 struct PlayerControlBar: View {
     @ObservedObject var model: PlayerBarModel
-    @Environment(\.colorScheme) private var colorScheme
+    @State private var showDanmakuSettings = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            Button {
-                model.togglePlay()
-            } label: {
-                Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 22, height: 22)
-            }
-            .help(model.isPlaying ? "暂停（空格）" : "播放（空格）")
-
+        VStack(spacing: 8) {
+            // 顶部一排：整排都是进度（拖动 + 两端时间）
             if model.hasTimeline {
-                Text(Formatters.duration(Int(model.displayPosition)))
-                    .font(.system(size: 11, weight: .medium))
-                    .monospacedDigit()
-                    .frame(width: 48, alignment: .leading)
-
-                slider
-
-                Text(Formatters.duration(Int(model.duration)))
-                    .font(.system(size: 11, weight: .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .frame(width: 48, alignment: .trailing)
-            } else {
-                liveBadge
-                Spacer(minLength: 4)
+                progressRow
             }
 
-            speedMenu
-            volumeControl
-
-            if model.hasDanmakuToggle {
+            // 按钮排
+            HStack(spacing: 8) {
                 Button {
-                    model.toggleDanmaku()
+                    model.togglePlay()
                 } label: {
-                    Image(systemName: model.danmakuEnabled ? "text.bubble.fill" : "text.bubble")
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 22, height: 22)
+                    Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 26, height: 22)
                 }
-                .help(model.danmakuEnabled ? "关闭弹幕（⌘D）" : "开启弹幕（⌘D）")
-            }
+                .controlPill()
+                .help(model.isPlaying ? "暂停（空格）" : "播放（空格）")
 
-            if !model.qualities.isEmpty {
-                qualityMenu
-            }
+                if !model.hasTimeline {
+                    liveBadge
+                }
 
-            if model.supportsPictureInPicture {
+                Spacer(minLength: 10)
+
+                speedButton
+                volumeControl
+
+                if model.hasDanmakuToggle {
+                    Button {
+                        model.toggleDanmaku()
+                    } label: {
+                        Image(systemName: model.danmakuEnabled ? "text.bubble.fill" : "text.bubble")
+                            .font(.system(size: 11, weight: .semibold))
+                            .frame(width: 24, height: 22)
+                    }
+                    .controlPill()
+                    .help(model.danmakuEnabled ? "关闭弹幕（⌘D）" : "开启弹幕（⌘D）")
+
+                    Button {
+                        showDanmakuSettings.toggle()
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 11, weight: .semibold))
+                            .frame(width: 24, height: 22)
+                    }
+                    .controlPill()
+                    .help("弹幕设置")
+                }
+
+                if !model.qualities.isEmpty {
+                    qualityMenu
+                }
+
+                if model.supportsPictureInPicture {
+                    Button {
+                        model.togglePictureInPicture()
+                    } label: {
+                        Image(systemName: "pip")
+                            .font(.system(size: 11, weight: .semibold))
+                            .frame(width: 24, height: 22)
+                    }
+                    .controlPill()
+                    .help("画中画")
+                }
+
                 Button {
-                    model.togglePictureInPicture()
+                    model.toggleFullscreen()
                 } label: {
-                    Image(systemName: "pip")
+                    Image(systemName: model.isFullscreen
+                          ? "arrow.down.right.and.arrow.up.left"
+                          : "arrow.up.left.and.arrow.down.right")
                         .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 22, height: 22)
+                        .frame(width: 24, height: 22)
                 }
-                .help("画中画")
+                .controlPill()
+                .help(model.isFullscreen ? "退出全屏（⌘F）" : "全屏（⌘F）")
             }
-
-            Button {
-                model.toggleFullscreen()
-            } label: {
-                Image(systemName: model.isFullscreen
-                      ? "arrow.down.right.and.arrow.up.left"
-                      : "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 22, height: 22)
-            }
-            .help(model.isFullscreen ? "退出全屏（⌘F）" : "全屏（⌘F）")
         }
         .buttonStyle(.plain)
         .foregroundStyle(.white.opacity(0.92))
         .padding(.horizontal, 14)
-        .padding(.vertical, 7)
+        .padding(.vertical, 9)
         .background {
             Capsule()
-                .fill(.white.opacity(0.06))
+                .fill(.black.opacity(0.30))
                 .glassEffect(.regular, in: .capsule)
         }
+        // 恒定深色外观：白天不刺眼，与深色系统外观下完全一致
+        .environment(\.colorScheme, .dark)
         .onHover { model.setHoveringBar($0) }
+        .popover(isPresented: $showDanmakuSettings, arrowEdge: .bottom) {
+            DanmakuSettingsCard()
+                .environment(\.colorScheme, .dark)
+        }
+        .onChange(of: showDanmakuSettings) { _, open in
+            model.setPanelOpen(open)
+        }
         .opacity(model.isBarVisible ? 1 : 0)
         .offset(y: model.isBarVisible ? 0 : 6)
         .allowsHitTesting(model.isBarVisible)
         .animation(.easeOut(duration: 0.18), value: model.isBarVisible)
+    }
+
+    // MARK: 进度（顶部整排）
+
+    private var progressRow: some View {
+        HStack(spacing: 10) {
+            Text(Formatters.duration(Int(model.displayPosition)))
+                .font(.system(size: 11, weight: .medium))
+                .monospacedDigit()
+                .frame(width: 48, alignment: .leading)
+
+            slider
+
+            Text(Formatters.duration(Int(model.duration)))
+                .font(.system(size: 11, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(.white.opacity(0.55))
+                .frame(width: 48, alignment: .trailing)
+        }
     }
 
     // MARK: 进度
@@ -388,7 +436,8 @@ struct PlayerControlBar: View {
 
     // MARK: 倍速 / 音量
 
-    private var speedMenu: some View {
+    /// 独立的倍速调节按钮：点开倍速菜单，按钮上直接显示当前倍速
+    private var speedButton: some View {
         Menu {
             ForEach(PlayerBarModel.speedOptions, id: \.self) { option in
                 Button {
@@ -402,14 +451,19 @@ struct PlayerControlBar: View {
                 }
             }
         } label: {
-            Text(speedText(model.speed))
-                .font(.system(size: 11, weight: .semibold))
-                .monospacedDigit()
-                .frame(height: 22)
+            HStack(spacing: 3) {
+                Image(systemName: "gauge")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(speedText(model.speed))
+                    .font(.system(size: 11, weight: .semibold))
+                    .monospacedDigit()
+            }
+            .frame(height: 22)
         }
         .menuStyle(.button)
         .menuIndicator(.hidden)
         .fixedSize()
+        .controlPill()
         .help("播放速度")
     }
 
@@ -424,8 +478,9 @@ struct PlayerControlBar: View {
             } label: {
                 Image(systemName: volumeIcon)
                     .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 22, height: 22)
+                    .frame(width: 24, height: 22)
             }
+            .controlPill()
             .help(model.isMuted ? "取消静音" : "静音")
 
             Slider(
@@ -471,12 +526,38 @@ struct PlayerControlBar: View {
         .menuStyle(.button)
         .menuIndicator(.hidden)
         .fixedSize()
+        .controlPill()
         .help("清晰度")
     }
 
     private var currentQualityName: String? {
         guard let id = model.currentQualityId else { return nil }
         return model.qualities.first { $0.id == id }?.name
+    }
+}
+
+// MARK: - 按钮样式
+
+/// 控制栏按钮的悬停小胶囊：平时透明，指针移上去浮出一层浅底，
+/// 让"弹幕设置""倍速"这些图标看起来是可点的按钮而不是装饰。
+private struct ControlPill: ViewModifier {
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 5)
+            .frame(height: 24)
+            .background {
+                Capsule().fill(.white.opacity(hovering ? 0.16 : 0.001))
+            }
+            .contentShape(Capsule())
+            .onHover { hovering = $0 }
+    }
+}
+
+extension View {
+    fileprivate func controlPill() -> some View {
+        modifier(ControlPill())
     }
 }
 
@@ -497,6 +578,12 @@ final class PlayerControlsHostView: NSView {
         self.model = model
         self.barView = NSHostingView(rootView: PlayerControlBar(model: model))
         super.init(frame: .zero)
+
+        // 控制栏恒定深色外观：白天不刺眼，深浅两种系统外观下观感一致
+        // （材质/文字都按 darkAqua 渲染，弹出的弹幕设置面板同样跟随）
+        let dark = NSAppearance(named: .darkAqua)
+        appearance = dark
+        barView.appearance = dark
 
         barView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(barView)
