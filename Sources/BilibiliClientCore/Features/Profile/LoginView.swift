@@ -1,12 +1,16 @@
-import AppKit
 import CoreImage
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject private var session: SessionStore
     @Environment(\.dismiss) private var dismiss
 
-    @State private var qrImage: NSImage?
+    @State private var qrImage: PlatformImage?
     @State private var qrURL: URL?
     @State private var statusText = "正在获取二维码…"
     @State private var pollTask: Task<Void, Never>?
@@ -23,13 +27,22 @@ struct LoginView: View {
                     .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
 
                 if let qrImage {
-                    Image(nsImage: qrImage)
+                    Image(platformImage: qrImage)
                         .resizable()
                         .interpolation(.none)
                         .frame(width: 200, height: 200)
                 } else {
                     ProgressView()
                 }
+            }
+
+            // iPhone 自己就是扫码那台设备，扫不了屏幕上的码；iPad 可以直接用 iPhone 扫。
+            if AppPlatform.isPhone {
+                Text("当前是 iPhone，无法自己扫自己：请用另一台设备（iPad / 手机）打开 B 站 App 扫这个码，或先截图再到别的设备上识别。")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
             }
 
             Text(statusText)
@@ -112,21 +125,27 @@ struct LoginView: View {
 
     private func openInBrowser() {
         guard let qrURL else { return }
-        NSWorkspace.shared.open(qrURL)
+        AppPlatform.openExternally(qrURL)
     }
 }
 
 enum QRGenerator {
-    static func image(from string: String, size: CGFloat) -> NSImage? {
+    static func image(from string: String, size: CGFloat) -> PlatformImage? {
         guard let data = string.data(using: .utf8),
               let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
         filter.setValue(data, forKey: "inputMessage")
         filter.setValue("M", forKey: "inputCorrectionLevel")
         guard let output = filter.outputImage else { return nil }
         let scaled = output.transformed(by: CGAffineTransform(scaleX: 12, y: 12))
+        #if os(macOS)
         let rep = NSCIImageRep(ciImage: scaled)
         let image = NSImage(size: rep.size)
         image.addRepresentation(rep)
         return image
+        #else
+        let context = CIContext()
+        guard let cg = context.createCGImage(scaled, from: scaled.extent) else { return nil }
+        return UIImage(cgImage: cg)
+        #endif
     }
 }

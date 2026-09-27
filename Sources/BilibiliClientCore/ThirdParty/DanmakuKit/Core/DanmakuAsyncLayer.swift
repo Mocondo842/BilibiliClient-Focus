@@ -8,7 +8,11 @@
 #if canImport(UIKit)
 import UIKit
 #else
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 #endif
 
 class Sentinel {
@@ -59,7 +63,7 @@ public class DanmakuAsyncLayer: CALayer {
     override init() {
         super.init()
         #if os(macOS)
-        contentsScale = NSScreen.main?.backingScaleFactor ?? 1.0
+        contentsScale = PlatformScreen.mainScale(fallback: 1)
         #else
         contentsScale = UIScreen.main.scale
         #endif

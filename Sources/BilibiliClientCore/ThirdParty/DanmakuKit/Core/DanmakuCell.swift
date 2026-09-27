@@ -79,7 +79,7 @@ open class DanmakuCell: PlatformView {
     /// 声明为 open：自定义 cell 可以用位图缓存命中时同步换图（避免重建时闪出空窗）。
     open func redraw() {
         #if os(macOS)
-        layer?.setNeedsDisplay()
+        backingLayer?.setNeedsDisplay()
         #else
         layer.setNeedsDisplay()
         #endif
@@ -91,7 +91,7 @@ extension DanmakuCell {
     
     var realFrame: CGRect {
         #if os(macOS)
-        if let presentation = layer?.presentation() {
+        if let presentation = backingLayer?.presentation() {
             return presentation.frame
         } else {
             return frame
@@ -108,11 +108,7 @@ extension DanmakuCell {
     func setupLayer() {
         guard let layer = layer as? DanmakuAsyncLayer else { return }
 
-        #if os(macOS)
-        layer.contentsScale = PlatformScreen.main?.backingScaleFactor ?? 1.0
-        #else
-        layer.contentsScale = PlatformScreen.main.scale
-        #endif
+        layer.contentsScale = PlatformScreen.mainScale(fallback: 1)
         
         layer.willDisplay = { [weak self] _ in
             guard let strongSelf = self else { return }

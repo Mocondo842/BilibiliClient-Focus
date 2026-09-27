@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import MediaPlayer
 
 /// 系统媒体键与“正在播放”集成：
@@ -19,7 +23,9 @@ public final class SystemMediaCenter {
     private var lastProgressPush = Date.distantPast
     private var installed = false
     /// SwiftUIX 的事件监听（F7/F8/F9 以普通按键事件到达时）
+    #if os(macOS)
     private var eventMonitor: NSEventMonitor?
+    #endif
     private var resignObserver: NSObjectProtocol?
 
     /// F9 长按 2x 快进（仅“标准功能键”模式下的 keyDown/keyUp 路径）
@@ -29,15 +35,27 @@ public final class SystemMediaCenter {
 
     private init() {}
 
+    /// 退到后台的通知名：macOS 与 iOS 的 App 生命周期通知不同。
+    private static var didResignActiveNotification: Notification.Name {
+        #if os(macOS)
+        NSApplication.didResignActiveNotification
+        #else
+        // iOS 没有 didResignActive，语义最接近的是「即将失去前台」
+        UIApplication.willResignActiveNotification
+        #endif
+    }
+
     // MARK: - 安装
 
     public func install() {
         guard !installed else { return }
         installed = true
         registerRemoteCommands()
+        #if os(macOS)
         installFunctionKeyMonitor()
+        #endif
         resignObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
+            forName: Self.didResignActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.cancelF9Hold() }
         }
@@ -113,13 +131,13 @@ public final class SystemMediaCenter {
         Task { @MainActor in
             // 系统"正在播放"的封面只有几百像素，走图床尺寸后缀，别下整张原图
             let sized = Formatters.sized(url, .card) ?? url
-            let image: NSImage? = await withCheckedContinuation { continuation in
+            let image: PlatformImage? = await withCheckedContinuation { continuation in
                 BiliImages.pipeline.loadImage(with: sized) { result in
                     continuation.resume(returning: try? result.get().image)
                 }
             }
             guard let image else { return }
-            artwork = MPMediaItemArtwork(boundsSize: NSSize(width: 512, height: 512)) { _ in image }
+            artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 512, height: 512)) { _ in image }
             syncNowPlaying(force: true)
         }
     }
@@ -195,6 +213,7 @@ public final class SystemMediaCenter {
 
     // MARK: - 标准功能键模式（F7/F8/F9 作为普通按键事件到达时）
 
+    #if os(macOS)
     private func installFunctionKeyMonitor() {
         eventMonitor?.stop()
         eventMonitor = NSEventMonitor(context: .local, matching: [.keyDown, .keyUp]) { [weak self] event in
@@ -234,6 +253,7 @@ public final class SystemMediaCenter {
             return false
         }
     }
+    #endif
 
     private func f9KeyDown() {
         guard !f9Down else { return }

@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import SwiftUI
 
 /// 视频播放组件：系统 AVPlayerView（画面 + 原生全屏）+ 弹幕层 + 自绘液态玻璃控制栏。
@@ -21,18 +23,28 @@ struct VideoPlayerSurface: View {
         ZStack {
             Color.black
             if let player = playerController.player {
+                #if os(macOS)
                 PlayerSurfaceView(player: player,
                                   engine: engine,
                                   danmakuEnabled: danmakuEnabled,
                                   danmakuSettings: danmakuSettings,
                                   controls: controls)
                     .id(player)
+                #else
+                IOSPlayerSurface(player: player,
+                                 engine: engine,
+                                 danmakuEnabled: danmakuEnabled,
+                                 danmakuSettings: danmakuSettings)
+                    .id(player)
+                #endif
             }
         }
         .clipped()
     }
 
-    /// 自绘控制栏的输入：动作直接挂到 PlayerController，弹幕开关写回 @AppStorage
+    #if os(macOS)
+    /// 自绘控制栏的输入：动作直接挂到 PlayerController，弹幕开关写回 @AppStorage。
+    /// iOS 用 AVPlayerViewController 自带控件，不需要这条配置。
     private var controls: PlayerBarConfig {
         var config = PlayerBarConfig()
         config.isLive = false
@@ -48,6 +60,7 @@ struct VideoPlayerSurface: View {
         }
         return config
     }
+    #endif
 }
 
 /// 播放区域左上角“在线人数”徽标。
@@ -87,6 +100,7 @@ final class PlayerAreaFrameBox {
 /// 锚点：实时上报播放区域在屏幕坐标中的 frame（含滚动/窗口移动/缩放）。
 /// 播放区域平时就是页面里的普通视图，只有需要创建播放窗口（分离/全屏）时
 /// 才用它把窗口精确覆盖到画面所在位置。
+#if os(macOS)
 struct PlayerAreaReporter: NSViewRepresentable {
     let onFrame: (CGRect) -> Void
 
@@ -166,3 +180,4 @@ struct PlayerAreaReporter: NSViewRepresentable {
         }
     }
 }
+#endif

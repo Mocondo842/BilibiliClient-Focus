@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import CoreText
 import Foundation
 
@@ -77,7 +81,7 @@ final class BilibiliDanmakuModel: DanmakuCellModel {
         let relative = min(max(CGFloat(item.fontSize) / 18, 0.6), 1.8)
         let fontSize = 18 * relative * stageScale
         self.fontSize = fontSize
-        let font = NSFont.systemFont(ofSize: fontSize, weight: .medium)
+        let font = PlatformFont.systemFont(ofSize: fontSize, weight: .medium)
         let fillLine = CTLineCreateWithAttributedString(NSAttributedString(
             string: item.text,
             attributes: [.font: font, .foregroundColor: Self.color(from: item.color)]
@@ -85,7 +89,7 @@ final class BilibiliDanmakuModel: DanmakuCellModel {
         self.fillLine = fillLine
         self.outlineLine = CTLineCreateWithAttributedString(NSAttributedString(
             string: item.text,
-            attributes: [.font: font, .foregroundColor: NSColor.black]
+            attributes: [.font: font, .foregroundColor: PlatformColor.black]
         ))
 
         let bounds = CTLineGetBoundsWithOptions(fillLine, [])
@@ -141,11 +145,10 @@ final class BilibiliDanmakuModel: DanmakuCellModel {
         return context.makeImage()
     }
 
-    private static func color(from raw: UInt32) -> NSColor {
-        NSColor(srgbRed: CGFloat((raw >> 16) & 0xFF) / 255,
-                green: CGFloat((raw >> 8) & 0xFF) / 255,
-                blue: CGFloat(raw & 0xFF) / 255,
-                alpha: 1)
+    private static func color(from raw: UInt32) -> PlatformColor {
+        .srgb(CGFloat((raw >> 16) & 0xFF) / 255,
+              CGFloat((raw >> 8) & 0xFF) / 255,
+              CGFloat(raw & 0xFF) / 255)
     }
 }
 
@@ -194,11 +197,11 @@ final class BilibiliDanmakuCell: DanmakuCell {
             return
         }
         // 位图密度由 model 决定（跟随当前显示缩放），换场/重画前先对齐
-        if abs((layer?.contentsScale ?? 0) - model.renderScale) > 0.05 {
-            layer?.contentsScale = model.renderScale
+        if abs((backingLayer?.contentsScale ?? 0) - model.renderScale) > 0.05 {
+            backingLayer?.contentsScale = model.renderScale
         }
         if let image = DanmakuTextRenderer.image(for: model.cacheKey) {
-            layer?.contents = image
+            backingLayer?.contents = image
             return
         }
         super.redraw()
@@ -209,7 +212,7 @@ final class BilibiliDanmakuCell: DanmakuCell {
         super.didDisplay(finished)
         guard finished,
               let model = model as? BilibiliDanmakuModel,
-              let raw = layer?.contents,
+              let raw = backingLayer?.contents,
               CFGetTypeID(raw as CFTypeRef) == CGImage.typeID else { return }
         DanmakuTextRenderer.store((raw as! CGImage), for: model.cacheKey)
     }
@@ -236,7 +239,7 @@ final class DanmakuEngine {
     let danmakuView = DanmakuView(frame: .zero)
     /// 底部固定弹幕单独一张视图：全屏过渡时底部弹幕要绕画面**下边**缩放，
     /// 顶部/滚动弹幕绕**上边**缩放，容器宽高比变化时两者的位移量并不相同
-    /// （见 `DanmakuOverlayNSView` 的两个舞台层）。
+    /// （见 `DanmakuOverlayView` 的两个舞台层）。
     let bottomDanmakuView = DanmakuView(frame: .zero)
 
     private var items: [DanmakuItem] = []
@@ -254,7 +257,7 @@ final class DanmakuEngine {
     /// 用户字号缩放：作为舞台缩放的额外倍数，纯 transform，不重排轨道
     private(set) var fontScale: CGFloat = 1
     /// 文字位图的栅格化倍率（跟随窗口 backing scale）
-    private var renderScale: CGFloat = NSScreen.main?.backingScaleFactor ?? 2
+    private var renderScale: CGFloat = PlatformScreen.mainScale(fallback: 2)
     /// 舞台基准之外的额外显示缩放（全屏跟随期间由渲染层传入）
     private var displayScale: CGFloat = 1
 
@@ -280,7 +283,7 @@ final class DanmakuEngine {
         view.trackHeight = Self.rowHeight
         view.paddingTop = Self.topInset
         view.paddingBottom = Self.bottomReserve
-        view.alphaValue = CGFloat(DanmakuSettings.default.opacity)
+        view.viewAlpha = CGFloat(DanmakuSettings.default.opacity)
     }
 
     // MARK: - 外观 / 行为设置
@@ -295,7 +298,7 @@ final class DanmakuEngine {
         appliedSettings = settings
         fontScale = CGFloat(settings.fontScale)
         for view in views {
-            view.alphaValue = CGFloat(settings.opacity)
+            view.viewAlpha = CGFloat(settings.opacity)
             view.displayArea = CGFloat(settings.displayArea.rawValue)
             view.isOverlap = settings.allowsOverlap
         }
@@ -451,7 +454,7 @@ final class DanmakuEngine {
         let density = displayDensity
         for view in views {
             for case let cell as BilibiliDanmakuCell in view.subviews
-            where (cell.layer?.opacity ?? 0) > 0.01 {
+            where (cell.backingLayer?.opacity ?? 0) > 0.01 {
                 guard let model = cell.model as? BilibiliDanmakuModel,
                       abs(model.renderScale - density) > 0.05 else { continue }
                 model.renderScale = density

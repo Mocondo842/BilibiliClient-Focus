@@ -1,3 +1,6 @@
+// 本文件是 macOS 专属播放器实现（AVPlayerView + 自绘控制栏 + 分离窗口）。
+// iOS 用系统 AVPlayerViewController，见 IOSPlayerSurface.swift。
+#if os(macOS)
 import AppKit
 import AVFoundation
 import SwiftUI
@@ -591,3 +594,4 @@ final class PlayerControlsHostView: NSView {
         barView.frame.contains(convert(windowPoint, from: nil))
     }
 }
+#endif

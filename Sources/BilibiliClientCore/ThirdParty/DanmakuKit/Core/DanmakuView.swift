@@ -284,12 +284,12 @@ public class DanmakuView: PlatformView {
     
 #if os(macOS)
     public override func hitTest(_ point: NSPoint) -> NSView? {
-        guard !isHidden, alphaValue > 0 else { return nil }
+        guard !isHidden, viewAlpha > 0 else { return nil }
         guard self.bounds.contains(point) else { return nil }
         for sub in subviews.reversed() {
             var local = self.convert(point, to: sub)
-            if let presentation = sub.layer?.presentation() {
-                local = self.layer?.convert(point, to: presentation) ?? local
+            if let presentation = sub.backingLayer?.presentation() {
+                local = self.backingLayer?.convert(point, to: presentation) ?? local
             }
             if let found = sub.hitTest(local) { return found }
         }

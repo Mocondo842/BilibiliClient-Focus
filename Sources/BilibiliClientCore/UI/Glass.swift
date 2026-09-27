@@ -31,7 +31,7 @@ struct CardBackground: ViewModifier {
     private func solidBody(_ content: Content) -> some View {
         content.background {
             RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(Color.cardSolidBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: cornerRadius)
                         .strokeBorder(.primary.opacity(0.12), lineWidth: 1)

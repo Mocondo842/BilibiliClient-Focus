@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import SwiftUI
 
 public struct UpRoute: Hashable {
@@ -70,75 +72,115 @@ public struct RootView: View {
     }
 
     public var body: some View {
+        #if os(macOS)
         NavigationSplitView {
             sidebar
                 .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 270)
         } detail: {
-            NavigationStack(path: $router.path) {
-                Group {
-                    switch selection {
-                    case .home:
-                        RecommendView()
-                    case .zones:
-                        ZonesView()
-                    case .popular:
-                        PopularView()
-                    case .live:
-                        LiveFeedView()
-                    case .search:
-                        SearchView(query: submittedQuery)
-                    case .dynamics:
-                        DynamicFeedView()
-                    case .favorites:
-                        FavoritesView()
-                    case .history:
-                        HistoryView()
-                    case .watchLater:
-                        WatchLaterView()
-                    case .settings:
-                        SettingsView()
-                    case nil:
-                        RecommendView()
-                    }
-                }
-                .navigationDestination(for: String.self) { bvid in
-                    VideoDetailView(bvid: bvid)
-                }
-                .navigationDestination(for: UpRoute.self) { route in
-                    UpProfileView(mid: route.mid)
-                }
-                .navigationDestination(for: PartitionRoute.self) { route in
-                    PartitionVideosView(zone: BiliZone(id: route.tid, name: route.name, icon: "play.rectangle"))
-                }
-                .navigationDestination(for: SearchRoute.self) { route in
-                    SearchView(query: route.query)
-                }
-                .navigationDestination(for: DynamicRoute.self) { route in
-                    DynamicDetailView(id: route.id)
-                }
-                .navigationDestination(for: LiveRoute.self) { route in
-                    LiveDetailView(route: route)
-                }
-            }
+            detailStack
         }
         .preferredColorScheme(colorScheme)
         .sheet(isPresented: $showLogin) {
             LoginView()
         }
-        .onAppear {
-            // 绑定主窗口代理，用于“关闭窗口”行为（完全退出 / 菜单栏模式 / 询问）
-            let candidate = NSApp.windows.first { $0.identifier?.rawValue == "main" }
-                ?? NSApp.windows.first { $0.isVisible && !($0 is NSPanel) }
-            if let window = candidate {
-                AppDelegate.shared?.adoptMainWindow(window)
-                // macOS 会把窗口内第一个输入框（顶部搜索框）自动设为焦点，
-                // 启动时清掉，避免键盘快捷键被搜索框吞掉
-                DispatchQueue.main.async {
-                    window.makeFirstResponder(nil)
+        .onAppear(perform: bindMainWindow)
+        #else
+        // iPhone 底部标签栏 / iPad 顶部标签栏，iPad 上可一键切到侧边栏（Apple Music 式）。
+        // 分组用 SwiftUI 的 `TabSection`（嵌套 `Tab` 不被 SwiftUI 支持：Tab 只 conform
+        // TabContent，不 conform View）。侧边栏里的「浏览 / 我的」分组与 macOS 侧边栏一致。
+        TabView(selection: $selection) {
+            TabSection("浏览") {
+                Tab("推荐", systemImage: SidebarItem.home.icon, value: SidebarItem.home) { detailStack }
+                Tab("分区", systemImage: SidebarItem.zones.icon, value: SidebarItem.zones) { detailStack }
+                Tab("热门", systemImage: SidebarItem.popular.icon, value: SidebarItem.popular) { detailStack }
+                Tab("直播", systemImage: SidebarItem.live.icon, value: SidebarItem.live) { detailStack }
+                Tab("动态", systemImage: SidebarItem.dynamics.icon, value: SidebarItem.dynamics) { detailStack }
+            }
+            TabSection("我的") {
+                Tab("收藏", systemImage: SidebarItem.favorites.icon, value: SidebarItem.favorites) { detailStack }
+                Tab("历史", systemImage: SidebarItem.history.icon, value: SidebarItem.history) { detailStack }
+                Tab("稍后再看", systemImage: SidebarItem.watchLater.icon, value: SidebarItem.watchLater) { detailStack }
+            }
+            Tab("设置", systemImage: SidebarItem.settings.icon, value: SidebarItem.settings) { detailStack }
+        }
+        .tabViewStyle(.sidebarAdaptable)
+        .tabViewSidebarFooter {
+            accountBar
+        }
+        .searchable(text: $searchText, prompt: "搜索视频 / UP 主")
+        .onSubmit(of: .search) { submitSearch() }
+        .preferredColorScheme(colorScheme)
+        .sheet(isPresented: $showLogin) {
+            LoginView()
+        }
+        #endif
+    }
+
+    /// 详情区：macOS 与 iOS 共用同一套页面与导航目的地。
+    private var detailStack: some View {
+        NavigationStack(path: $router.path) {
+            Group {
+                switch selection {
+                case .home:
+                    RecommendView()
+                case .zones:
+                    ZonesView()
+                case .popular:
+                    PopularView()
+                case .live:
+                    LiveFeedView()
+                case .search:
+                    SearchView(query: submittedQuery)
+                case .dynamics:
+                    DynamicFeedView()
+                case .favorites:
+                    FavoritesView()
+                case .history:
+                    HistoryView()
+                case .watchLater:
+                    WatchLaterView()
+                case .settings:
+                    SettingsView()
+                case nil:
+                    RecommendView()
                 }
+            }
+            .navigationDestination(for: String.self) { bvid in
+                VideoDetailView(bvid: bvid)
+            }
+            .navigationDestination(for: UpRoute.self) { route in
+                UpProfileView(mid: route.mid)
+            }
+            .navigationDestination(for: PartitionRoute.self) { route in
+                PartitionVideosView(zone: BiliZone(id: route.tid, name: route.name, icon: "play.rectangle"))
+            }
+            .navigationDestination(for: SearchRoute.self) { route in
+                SearchView(query: route.query)
+            }
+            .navigationDestination(for: DynamicRoute.self) { route in
+                DynamicDetailView(id: route.id)
+            }
+            .navigationDestination(for: LiveRoute.self) { route in
+                LiveDetailView(route: route)
             }
         }
     }
+
+    #if os(macOS)
+    /// 绑定主窗口代理，用于“关闭窗口”行为（完全退出 / 菜单栏模式 / 询问）。
+    private func bindMainWindow() {
+        let candidate = NSApp.windows.first { $0.identifier?.rawValue == "main" }
+            ?? NSApp.windows.first { $0.isVisible && !($0 is NSPanel) }
+        if let window = candidate {
+            AppDelegate.shared?.adoptMainWindow(window)
+            // macOS 会把窗口内第一个输入框（顶部搜索框）自动设为焦点，
+            // 启动时清掉，避免键盘快捷键被搜索框吞掉
+            DispatchQueue.main.async {
+                window.makeFirstResponder(nil)
+            }
+        }
+    }
+    #endif
 
     private var sidebar: some View {
         List(selection: $selection) {
@@ -211,9 +253,13 @@ public struct RootView: View {
     private func submitSearch() {
         let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         submittedQuery = trimmed
-        if !trimmed.isEmpty {
-            selection = .search
-        }
+        guard !trimmed.isEmpty else { return }
+        #if os(macOS)
+        selection = .search
+        #else
+        // iOS 的搜索不在标签栏里，直接推进导航栈（与点站内搜索结果同一条路径）
+        router.path.append(SearchRoute(query: trimmed))
+        #endif
     }
 
     private func avatar(url: String, size: CGFloat) -> some View {

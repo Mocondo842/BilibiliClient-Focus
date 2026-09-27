@@ -1,3 +1,6 @@
+// 本文件是 macOS 专属播放器实现（AVPlayerView + 自绘控制栏 + 分离窗口）。
+// iOS 用系统 AVPlayerViewController，见 IOSPlayerSurface.swift。
+#if os(macOS)
 import AppKit
 import SwiftUI
 
@@ -100,3 +103,27 @@ extension PlayerWindowController: NSWindowDelegate {
     }
 }
 
+#else
+
+import Combine
+import Foundation
+import SwiftUI
+import UIKit
+
+/// iOS 没有「分离为独立窗口」这个概念，这里给一个同名同接口的空实现，
+/// 让 `VideoDetailView` 的调用点不必到处散落 `#if os(macOS)`。
+/// 「把画面带离页面」这件事在 iOS 由系统**画中画**承担（AVPlayerViewController 自带）。
+@MainActor
+final class PlayerWindowController: NSObject, ObservableObject {
+    /// 窗口当前是否存在（iOS 恒为 false）
+    @Published private(set) var isOpen = false
+    /// 是否为用户手动分离出来的独立窗口（iOS 恒为 false）
+    @Published private(set) var isDetached = false
+
+    var onCloseRequested: (() -> Void)?
+
+    func present(frame: CGRect, title: String, content: AnyView) {}
+    func close() {}
+}
+
+#endif

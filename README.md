@@ -1,8 +1,9 @@
 # Bilibili Client
 
-一个面向 macOS 的原生哔哩哔哩客户端，使用 SwiftUI 构建并遵循 macOS 26 设计语言。
+一个原生哔哩哔哩客户端，使用 SwiftUI 构建，同时面向 **macOS 与 iPadOS / iOS**：
+业务代码共享一份（`BilibiliClientCore`），只在真正跨不过去的平台能力处做分支。
 
-> 当前版本：**1.7.7** · 最低系统要求：**macOS 26.0**
+> 当前版本：**1.7.7** · 最低系统要求：**macOS 26.0** 或 **iOS / iPadOS 26.0**
 
 ## 功能
 
@@ -36,21 +37,42 @@
 
 ## 从源码运行
 
-要求 macOS 26.0+、Xcode 26 或匹配版本的 Swift 工具链。用 Xcode 打开 `Package.swift`，或执行：
+要求 macOS 26.0+ / iOS 26.0+、Xcode 26 或匹配版本的 Swift 工具链。用 Xcode 打开 `Package.swift`，或执行：
 
 ```bash
+# macOS
 swift run
 ./scripts/build_app.sh release
+
+# iOS / iPadOS（模拟器加 --simulator；默认产出未签名 IPA）
+./scripts/build_ios_app.sh --simulator debug
+./scripts/build_ios_app.sh release
 ```
 
-构建产物位于 `dist/`，版本归档位于 `dist/archive/<版本>/`。
+macOS 构建产物位于 `dist/`，iOS 产物位于 `dist/ios/`。
+
+## 平台差异
+
+同一份业务代码跑在两个平台上，凡是「系统本来就长不一样」的地方按各平台惯例走；
+真正的功能取舍只有下面这几条，都是明确决定过的：
+
+| | macOS | iPadOS / iOS |
+| --- | --- | --- |
+| 播放器 | `AVPlayerView` + 自绘液态玻璃控制栏 | `AVPlayerViewController` **系统控制栏**（进度/倍速/全屏/画中画），不自绘 |
+| 把画面带离页面 | 「分离窗口」独立窗口 | 系统**画中画** |
+| 导航 | `NavigationSplitView` 侧边栏 | iPhone 底部标签栏；iPad 顶部标签栏可一键切侧边栏（Apple Music 式） |
+| 登录 | 扫二维码 | 保留二维码；iPhone 上额外提示「请用另一台设备扫码」 |
+| 自动更新 | Sparkle，设置里有更新入口 | 无（不做应用内更新入口） |
+| 关闭窗口行为 | 菜单栏常驻 / 询问 / 完全退出 | 无此项（iOS 没有窗口与菜单栏概念） |
+
+其余一切（首页/热门/分区/直播/动态/搜索/收藏/历史/稍后再看、弹幕、评论、UP 主、投币点赞等）两个平台完全一致。
 
 ## 技术实现
 
-- SwiftUI、AVFoundation / AVKit 和原生 macOS 窗口行为
+- SwiftUI、AVFoundation / AVKit 与各平台原生窗口/播放行为
 - 本地 HTTP 代理将部分 DASH 分片转换为 HLS
 - Bilibili Web REST API 与 WBI 签名（`w_rid` / `wts`）
-- macOS Keychain Cookie、URLCache 图片缓存和 SwiftUI Lazy 容器
+- macOS Keychain Cookie（iOS 用 Keychain 同一套）、URLCache 图片缓存和 SwiftUI Lazy 容器
 - Icon Composer + `actool` 编译原生 `Assets.car`
 
 接口实现参考 [bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect)。

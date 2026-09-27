@@ -1,3 +1,6 @@
+// 本文件是 macOS 专属播放器实现（AVPlayerView + 自绘控制栏 + 分离窗口）。
+// iOS 用系统 AVPlayerViewController，见 IOSPlayerSurface.swift。
+#if os(macOS)
 import AVFoundation
 import AVKit
 import SwiftUI
@@ -64,7 +67,7 @@ final class DanmakuPlayerView: AVPlayerView {
     var onSpace: (@MainActor () -> Void)?
     var onSkip: (@MainActor (Double) -> Void)?
 
-    private var danmakuView: DanmakuOverlayNSView?
+    private var danmakuView: DanmakuOverlayView?
     private var danmakuEngine: DanmakuEngine?
     private var danmakuEnabled = false
     private var danmakuSettings: DanmakuSettings?
@@ -143,7 +146,7 @@ final class DanmakuPlayerView: AVPlayerView {
     func attachOverlaysIfNeeded() {
         guard let overlay = contentOverlayView else { return }
         if danmakuView == nil, let engine = danmakuEngine {
-            let view = DanmakuOverlayNSView(engine: engine, player: player)
+            let view = DanmakuOverlayView(engine: engine, player: player)
             view.enabled = danmakuEnabled
             if let danmakuSettings { view.apply(settings: danmakuSettings) }
             view.translatesAutoresizingMaskIntoConstraints = false
@@ -353,3 +356,4 @@ extension DanmakuPlayerView: AVPlayerViewDelegate {
         danmakuView?.endSizeTransition()
     }
 }
+#endif

@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import SwiftUI
 
 /// 顶部菜单栏“播放”菜单的状态中枢。
@@ -22,7 +24,9 @@ public final class PlaybackMenuState: ObservableObject {
 
     private var toggleDanmakuAction: (() -> Void)?
     private var toggleDetachAction: (() -> Void)?
+    #if os(macOS)
     private weak var playerView: DanmakuPlayerView?
+    #endif
 
     private init() {}
 
@@ -56,6 +60,7 @@ public final class PlaybackMenuState: ObservableObject {
     // MARK: - 播放器绑定（全屏开关要直接操作 AVPlayerView）
 
     /// 画面挂到窗口上时登记：页内与分离窗口共用同一套菜单。
+    #if os(macOS)
     func attachPlayerView(_ view: DanmakuPlayerView) {
         playerView = view
         hasPlayer = true
@@ -68,6 +73,15 @@ public final class PlaybackMenuState: ObservableObject {
         hasPlayer = false
         isFullscreen = false
     }
+    #else
+    /// iOS：没有 AVPlayerView，也就没有「AVKit 全屏入口」这一说。
+    /// 全屏由 AVPlayerViewController 自带控件负责，这里只保留状态位。
+    func attachPlayerView() { hasPlayer = true }
+    func detachPlayerView() {
+        hasPlayer = false
+        isFullscreen = false
+    }
+    #endif
 
     // MARK: - 菜单动作
 
@@ -77,10 +91,12 @@ public final class PlaybackMenuState: ObservableObject {
     /// 切换视频全屏：优先走 AVKit 自己的全屏入口（与控件条上的全屏按钮同一条路径，
     /// 动画、弹幕跟随完全一致）；系统不再提供该入口时退回窗口全屏。
     public func performToggleFullscreen() {
+        #if os(macOS)
         guard let view = playerView else { return }
         guard view.toggleNativeFullscreen() else {
             view.window?.toggleFullScreen(nil)
             return
         }
+        #endif
     }
 }

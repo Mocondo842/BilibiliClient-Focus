@@ -122,7 +122,9 @@ struct DanmakuSettingsCard: View {
 
     private func typeToggle(_ title: String, isOn: Binding<Bool>) -> some View {
         Toggle(title, isOn: isOn)
+            #if os(macOS)
             .toggleStyle(.checkbox)
+            #endif
             .font(.callout)
     }
 }

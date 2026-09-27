@@ -11,12 +11,20 @@ struct LivePlayerSurface: View {
         ZStack {
             Color.black
             if let player = model.player {
+                #if os(macOS)
                 PlayerSurfaceView(player: player,
                                   engine: nil,
                                   danmakuEnabled: false,
                                   danmakuSettings: .current,
                                   controls: controls)
                     .id(player)
+                #else
+                IOSPlayerSurface(player: player,
+                                 engine: nil,
+                                 danmakuEnabled: false,
+                                 danmakuSettings: .current)
+                    .id(player)
+                #endif
             } else if model.state == .loading {
                 VStack(spacing: 10) {
                     ProgressView()
@@ -59,11 +67,14 @@ struct LivePlayerSurface: View {
         .clipped()
     }
 
-    /// 自绘控制栏的直播变体输入：没有时间轴/弹幕/画质，只接播放开关
+    #if os(macOS)
+    /// 自绘控制栏的直播变体输入：没有时间轴/弹幕/画质，只接播放开关。
+    /// iOS 用 AVPlayerViewController 自带控件，不需要这条配置。
     private var controls: PlayerBarConfig {
         var config = PlayerBarConfig()
         config.isLive = true
         config.onTogglePlay = { model.togglePlay() }
         return config
     }
+    #endif
 }

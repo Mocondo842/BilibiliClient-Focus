@@ -279,7 +279,6 @@ struct LiveDetailView: View {
                 .monospacedDigit()
         }
     }
-
     private func statusRow(_ detail: LiveRoomDetail) -> some View {
         HStack(spacing: 16) {
             HStack(spacing: 5) {
@@ -381,7 +380,7 @@ private struct LiveChatPanel: View {
             }
             .background {
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color(nsColor: .controlBackgroundColor).opacity(isDark ? 0.6 : 0.8))
+                    .fill(Color.cardSolidBackground.opacity(isDark ? 0.6 : 0.8))
                     .overlay {
                         RoundedRectangle(cornerRadius: 14)
                             .strokeBorder(.primary.opacity(0.1), lineWidth: 1)
@@ -428,21 +427,26 @@ private struct LiveChatPanel: View {
                     proxy.scrollTo(last.id, anchor: .bottom)
                 }
             }
-            .overlay {
-                if engine.messages.isEmpty {
-                    VStack(spacing: 6) {
-                        Image(systemName: "bubble.left.and.bubble.right")
-                            .font(.title3)
-                            .foregroundStyle(.tertiary)
-                        Text(engine.errorText ?? "等待弹幕…")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.horizontal, 12)
-                    .allowsHitTesting(false)
-                }
+            .overlay { liveChatPlaceholder }
+        }
+    }
+
+    /// 直播弹幕区的空态占位。单独成属性是为了拆开 `.overlay` 那条过长的表达式 ——
+    /// iOS 下 SwiftUI 重载解析更慢，整块塞在闭包里会让编译器“无法在合理时间内类型检查”。
+    @ViewBuilder
+    private var liveChatPlaceholder: some View {
+        if engine.messages.isEmpty {
+            VStack(spacing: 6) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.title3)
+                    .foregroundStyle(.tertiary)
+                Text(engine.errorText ?? "等待弹幕…")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
             }
+            .padding(.horizontal, 12)
+            .allowsHitTesting(false)
         }
     }
 }

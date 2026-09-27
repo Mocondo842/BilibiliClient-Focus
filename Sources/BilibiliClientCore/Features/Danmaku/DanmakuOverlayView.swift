@@ -1,5 +1,9 @@
 import AVFoundation
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 
 /// 弹幕承载视图：挂在 `AVPlayerView.contentOverlayView` 上（画面之上、原生控件之下）。
 ///
@@ -15,7 +19,7 @@ import AppKit
 /// 为什么是两个舞台层：滚动/顶部弹幕的 y 从**顶边**量，底部弹幕从**底边**量，
 /// 而全屏与窗口画面的宽高比未必相同（差值是 `newH - newW / baseW * baseH`）。
 /// 一个舞台只能锚住一条边，锚错的另一类弹幕在收尾时必须瞬移这一整段差值。
-final class DanmakuOverlayNSView: NSView {
+final class DanmakuOverlayView: PlatformView {
     let engine: DanmakuEngine
 
     weak var player: AVPlayer? {
@@ -31,9 +35,9 @@ final class DanmakuOverlayNSView: NSView {
     }
 
     /// 滚动 + 顶部弹幕舞台：绕画面**上边**缩放
-    private let topStage = NSView()
+    private let topStage = PlatformView()
     /// 底部固定弹幕舞台：绕画面**下边**缩放
-    private let bottomStage = NSView()
+    private let bottomStage = PlatformView()
     /// 当前弹幕坐标/字号所依据的舞台尺寸；过渡期间保持不变，稳定后按新密度重画
     private var stageSize: CGSize = .zero
     private var lastViewportSize: CGSize = .zero
@@ -61,13 +65,10 @@ final class DanmakuOverlayNSView: NSView {
         self.engine = engine
         self.player = player
         super.init(frame: .zero)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.clear.cgColor
-        layer?.masksToBounds = true
-
+        // 自身要裁掉超出边界的子层（masksToBounds），两个舞台层不需要
+        applyClearClippingLayerBackground()
         for host in [topStage, bottomStage] {
-            host.wantsLayer = true
-            host.layer?.backgroundColor = NSColor.clear.cgColor
+            host.applyClearLayerBackground()
             addSubview(host)
         }
         topStage.addSubview(engine.danmakuView)
@@ -106,11 +107,16 @@ final class DanmakuOverlayNSView: NSView {
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(250), execute: work)
     }
 
-    /// 点击穿透到下层播放器（弹幕不拦截鼠标、不挡系统控件）
+    /// 点击穿透到下层播放器（弹幕不拦截鼠标/触摸、不挡系统控件）
+    #if os(macOS)
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    #else
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { nil }
+    #endif
 
     // MARK: - 布局 / 舞台跟随
 
+    #if os(macOS)
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         syncStage()
@@ -123,6 +129,22 @@ final class DanmakuOverlayNSView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        windowAttachmentChanged()
+    }
+    #else
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        syncStage()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        windowAttachmentChanged()
+    }
+    #endif
+
+    /// 挂上/离开窗口：全屏过渡中途会短暂没有窗口，所以停表留宽限期。
+    private func windowAttachmentChanged() {
         detachWork?.cancel()
         detachWork = nil
         if window == nil {
@@ -201,8 +223,8 @@ final class DanmakuOverlayNSView: NSView {
         topStage.frame = CGRect(x: 0, y: bounds.height - base.height,
                                 width: base.width, height: base.height)
         bottomStage.frame = CGRect(x: 0, y: 0, width: base.width, height: base.height)
-        topStage.layer?.sublayerTransform = top
-        bottomStage.layer?.sublayerTransform = bottom
+        topStage.backingLayer?.sublayerTransform = top
+        bottomStage.backingLayer?.sublayerTransform = bottom
         CATransaction.commit()
     }
 
@@ -282,7 +304,7 @@ final class DanmakuOverlayNSView: NSView {
 
     private func tick() {
         guard enabled, let player else { return }
-        if let scale = window?.backingScaleFactor { engine.setRenderScale(scale) }
+        if let scale = windowScale { engine.setRenderScale(scale) }
         let time = player.currentTime().seconds
         guard time.isFinite else { return }
         let playing = player.timeControlStatus == .playing

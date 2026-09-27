@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import SwiftUI
 
 /// 全局导航路由：供菜单栏卡片等“主界面之外”的位置触发主窗口跳转。
@@ -18,8 +20,10 @@ public final class AppRouter: ObservableObject {
     /// 回到主界面：激活并前置主窗口。
     public func openMain() {
         // 始终唤回同一个主窗口（排除菜单栏 popover 面板）
+        #if os(macOS)
         AppDelegate.shared?.showDockIcon()
         AppDelegate.mainWindow()?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        #endif
     }
 }

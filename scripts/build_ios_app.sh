@@ -136,6 +136,12 @@ plist = {
         "UIInterfaceOrientationLandscapeRight",
     ],
     "ITSAppUsesNonExemptEncryption": False,
+    # HLSProxy 用 http://127.0.0.1 起本地代理转发 HLS，必须豁免 ATS
+    "NSAppTransportSecurity": {
+        "NSAllowsLocalNetworking": True,
+    },
+    # 后台继续播放（与 macOS 的「关闭窗口后行为」无关，是 iOS 必需的能力）
+    "UIBackgroundModes": ["audio"],
 }
 plist.update(icons)
 

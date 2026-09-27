@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import SwiftUI
 
 struct VideoDetailView: View {
@@ -314,7 +316,7 @@ struct VideoDetailView: View {
             .frame(width: 210, alignment: .leading)
             .background {
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(isCurrent ? Color.pink.opacity(0.1) : Color(nsColor: .controlBackgroundColor))
+                    .fill(isCurrent ? Color.pink.opacity(0.1) : Color.cardSolidBackground)
                     .overlay {
                         RoundedRectangle(cornerRadius: 10)
                             .strokeBorder(isCurrent ? Color.pink.opacity(0.45) : Color.primary.opacity(0.1), lineWidth: 1)
@@ -384,11 +386,14 @@ struct VideoDetailView: View {
                     .strokeBorder(.white.opacity(0.08), lineWidth: 1)
             }
         }
+        #if os(macOS)
+        // 只有 macOS 需要知道画面的屏幕位置（分离窗口要精确覆盖到画面上）
         .background(
             PlayerAreaReporter(onFrame: { frame in
                 playerArea.frame = frame
             })
         )
+        #endif
     }
 
     /// 画面当前是否正在页面内播放（决定页面显示播放组件还是空位）。
@@ -442,6 +447,7 @@ struct VideoDetailView: View {
                     DanmakuSettingsCard()
                 }
 
+                #if os(macOS)
                 Button {
                     toggleDetach()
                 } label: {
@@ -454,6 +460,7 @@ struct VideoDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .help(playbackWindow.isDetached ? "把画面收回播放页" : "把画面分离为独立窗口")
+                #endif
 
                 Spacer(minLength: 0)
 
@@ -541,11 +548,7 @@ struct VideoDetailView: View {
                 }
             )
             .onHover { hovering in
-                if hovering {
-                    NSCursor.pointingHand.push()
-                } else {
-                    NSCursor.pop()
-                }
+                AppPlatform.setPointingHandCursor(hovering)
             }
             .hoverScale(scale: 1.06)
             .help("点赞 · 长按一键三连")
@@ -841,9 +844,7 @@ struct VideoDetailView: View {
     private func copyLink() async {
         guard let bvid = detail?.view.bvid else { return }
         let link = detail?.view.shortLinkV2 ?? "https://www.bilibili.com/video/\(bvid)"
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(link, forType: .string)
+        AppPlatform.copyToPasteboard(link)
         shareMessage = "已将视频链接复制到剪贴板"
     }
 
@@ -856,7 +857,7 @@ struct VideoDetailView: View {
     private func openInBrowser() {
         guard let bvid = detail?.view.bvid,
               let url = URL(string: "https://www.bilibili.com/video/\(bvid)") else { return }
-        NSWorkspace.shared.open(url)
+        AppPlatform.openExternally(url)
     }
 
     private func stat(_ value: Int, _ icon: String) -> some View {
@@ -963,8 +964,12 @@ struct VideoDetailView: View {
         bindSystemPlayer()
         var frame = playerArea.frame
         if frame.width < 40 || frame.height < 40 {
+            #if os(macOS)
             frame = AppDelegate.mainWindow()?.frame
                 ?? CGRect(x: 240, y: 240, width: 640, height: 360)
+            #else
+            frame = CGRect(x: 240, y: 240, width: 640, height: 360)
+            #endif
         }
         let controller = playbackWindow
         controller.onCloseRequested = { [weak controller] in
@@ -1056,7 +1061,7 @@ struct VideoDetailView: View {
                 .padding(.vertical, 6)
                 .background {
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .fill(Color.cardSolidBackground)
                         .overlay {
                             RoundedRectangle(cornerRadius: 10)
                                 .strokeBorder(.primary.opacity(0.12), lineWidth: 1)

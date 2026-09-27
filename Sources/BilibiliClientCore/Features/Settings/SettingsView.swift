@@ -88,8 +88,11 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 0) {
                 appearanceSection.padding(.vertical, 16)
                 Divider()
-                windowSection.padding(.vertical, 16)
-                Divider()
+                // 「关闭窗口后行为」只对有窗口/菜单栏概念的平台有意义（macOS）
+                if AppPlatform.hasWindowManagement {
+                    windowSection.padding(.vertical, 16)
+                    Divider()
+                }
                 danmakuSection.padding(.vertical, 16)
                 Divider()
                 displaySection.padding(.vertical, 16)
