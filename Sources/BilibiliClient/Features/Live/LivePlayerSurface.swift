@@ -1,8 +1,9 @@
 import AVFoundation
 import SwiftUI
 
-/// 直播播放组件：系统 AVPlayerView（画面 + 原生播放控件 + 原生全屏）+ 在线人数徽标。
-/// 播放与全屏（含全屏动画）全部由 AVKit 负责，这里不再自绘任何播放控件。
+/// 直播播放组件：系统 AVPlayerView（画面 + 原生全屏）+ 自绘液态玻璃控制栏 + 在线人数徽标。
+/// 全屏（含全屏动画）由 AVKit 负责；控制栏是直播变体：没有时间轴（换成"直播"徽标），
+/// 也没有弹幕开关与画质入口，只保留播放/倍速/音量/画中画/全屏。
 struct LivePlayerSurface: View {
     @ObservedObject var model: LivePlayerModel
 
@@ -14,9 +15,7 @@ struct LivePlayerSurface: View {
                                   engine: nil,
                                   danmakuEnabled: false,
                                   danmakuSettings: .current,
-                                  isLive: true,
-                                  onSpace: { model.togglePlay() },
-                                  onSkip: { _ in })
+                                  controls: controls)
                     .id(player)
             } else if model.state == .loading {
                 VStack(spacing: 10) {
@@ -58,5 +57,13 @@ struct LivePlayerSurface: View {
             }
         }
         .clipped()
+    }
+
+    /// 自绘控制栏的直播变体输入：没有时间轴/弹幕/画质，只接播放开关
+    private var controls: PlayerBarConfig {
+        var config = PlayerBarConfig()
+        config.isLive = true
+        config.onTogglePlay = { model.togglePlay() }
+        return config
     }
 }

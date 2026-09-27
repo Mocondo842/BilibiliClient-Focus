@@ -3,12 +3,15 @@ import AVKit
 import SwiftUI
 import SwiftUIX
 
-/// 播放画面：直接使用系统 `AVPlayerView`。
+/// 播放画面：系统 `AVPlayerView` 只负责画面与全屏（含全屏动画），
+/// 播放控件改为自绘的液态玻璃控制栏（`PlayerControlBar`）。
 ///
-/// 播放/暂停、进度、音量、倍速、画中画以及全屏（连同全屏动画）全部交给 AVKit：
-/// 它的全屏按钮与双击都是系统原生全屏——画面从当前位置放大铺满屏幕，退出时
-/// 平滑缩回原位。弹幕挂在 `contentOverlayView` 上（画面之上、原生控件之下），
-/// 既不挡控件，自身也不拦截鼠标。
+/// 三样东西都挂在 `contentOverlayView` 上，因此会跟着播放器一起被系统搬进
+/// 全屏窗口：弹幕层（画面之上）、自绘控制栏（弹幕之上）。AVKit 自带控件条
+/// 整体关闭（`controlsStyle = .none`），既是为了换成简洁样式，也顺带绕开
+/// "未就绪播放项带时间轴会触发 AVKit 内部 precondition 崩溃"那个坑。
+/// 全屏仍走 AVKit：控件栏上的全屏按钮与画面双击都调 `enterFullScreen:`，
+/// 与系统全屏动画、弹幕跟随完全一致。
 struct PlayerSurfaceView: NSViewRepresentable {
     let player: AVPlayer
     /// 弹幕引擎；直播没有叠加弹幕时传 nil
@@ -16,38 +19,32 @@ struct PlayerSurfaceView: NSViewRepresentable {
     let danmakuEnabled: Bool
     /// 弹幕外观/行为设置（不透明度、字号、显示区域、显示类型…）
     let danmakuSettings: DanmakuSettings
-    /// 直播流：时长恒为不定值，控件条要一直避开时间轴（见 `applyControlsStyle`）
-    let isLive: Bool
-    let onSpace: () -> Void
-    let onSkip: (Double) -> Void
+    /// 自绘控制栏的输入（直播/点播由 `controls.isLive` 区分）
+    let controls: PlayerBarConfig
 
     func makeNSView(context: Context) -> DanmakuPlayerView {
         let view = DanmakuPlayerView()
         view.setPlayer(player)
         view.videoGravity = .resizeAspect
         view.allowsPictureInPicturePlayback = true
-        // AVKit 自带全屏按钮默认关闭，打开后进入/退出全屏连同缩放动画都交给系统
-        view.showsFullScreenToggleButton = true
+        // AVKit 控件条整体关闭：播放/进度/音量/倍速/画质都由自绘控制栏负责
+        view.controlsStyle = .none
         // “正在播放”统一由 SystemMediaCenter 上报，避免与 AVKit 互相覆盖
         view.updatesNowPlayingInfoCenter = false
-        view.onSpace = onSpace
-        view.onSkip = onSkip
-        view.isLive = isLive
         if let engine {
             view.installDanmaku(engine: engine, enabled: danmakuEnabled)
         }
         view.applyDanmakuSettings(danmakuSettings)
+        view.installControls(controls)
         return view
     }
 
     func updateNSView(_ view: DanmakuPlayerView, context: Context) {
         view.setPlayer(player)
-        view.onSpace = onSpace
-        view.onSkip = onSkip
-        view.isLive = isLive
         view.setDanmakuEnabled(danmakuEnabled)
         view.applyDanmakuSettings(danmakuSettings)
-        view.attachDanmakuIfNeeded()
+        view.updateControls(controls)
+        view.attachOverlaysIfNeeded()
     }
 
     static func dismantleNSView(_ view: DanmakuPlayerView, coordinator: ()) {
@@ -55,21 +52,18 @@ struct PlayerSurfaceView: NSViewRepresentable {
     }
 }
 
-/// `AVPlayerView` 子类：在原生控件之下挂弹幕层，并保留页面原有的键盘操作。
+/// `AVPlayerView` 子类：在画面之上挂弹幕层与自绘控制栏，并保留页面原有的键盘操作。
 ///
 /// 两个要点：
-/// 1. AVKit 的时间轴滑块会在播放项尚未就绪（时长为 NaN）时触发内部 precondition
-///    崩溃，所以播放项 ready 之前一律收起控件条，就绪后再显示——全屏按钮也随之
-///    在能播之后才出现。
+/// 1. 控件条由自绘控制栏取代（`controlsStyle = .none`），全屏仍走 AVKit 的
+///    `enterFullScreen:` / `exitFullScreen:`（探测私有 selector 再调用），因此
+///    全屏动画与弹幕跟随和原来完全一致。
 /// 2. AVKit 的内部子视图会截走 hit-test 与第一响应者，直接重写 `keyDown` 在真实
 ///    点击画面后收不到按键，因此快捷键改用窗口级本地事件监听实现。
 final class DanmakuPlayerView: AVPlayerView {
-    var onSpace: (() -> Void)?
-    var onSkip: ((Double) -> Void)?
-    /// 直播流：控件条不使用带时间轴的样式
-    var isLive = false {
-        didSet { if isLive != oldValue { applyControlsStyle() } }
-    }
+    /// 页面快捷键（空格 / ←→）回调：与控制栏共用同一套动作入口
+    var onSpace: (@MainActor () -> Void)?
+    var onSkip: (@MainActor (Double) -> Void)?
 
     private var danmakuView: DanmakuOverlayNSView?
     private var danmakuEngine: DanmakuEngine?
@@ -77,12 +71,12 @@ final class DanmakuPlayerView: AVPlayerView {
     private var danmakuSettings: DanmakuSettings?
     private var attachScheduled = false
 
+    /// 自绘控制栏的状态中枢（含承载层），与弹幕层同挂在 contentOverlayView 上
+    let controlsModel = PlayerBarModel()
+    private var controlsHost: PlayerControlsHostView?
+
     /// SwiftUIX 的事件监听：start/stop 生命周自带，不用自己 add/remove 本地监视器
     private var keyMonitor: NSEventMonitor?
-    private var itemStatusObservation: NSKeyValueObservation?
-    private var itemDurationObservation: NSKeyValueObservation?
-    /// 当前已装 KVO 的播放项：同一个 item 不重复安装
-    private weak var observedItem: AVPlayerItem?
     /// AVKit 原生全屏期间，播放器在 AVKit 自己的全屏窗口里
     private var isNativeFullscreen = false
     private var holdTask: Task<Void, Never>?
@@ -94,72 +88,27 @@ final class DanmakuPlayerView: AVPlayerView {
     deinit {
         holdTask?.cancel()
         keyMonitor?.stop()
-        itemStatusObservation?.invalidate()
-        itemDurationObservation?.invalidate()
     }
 
-    // MARK: - 播放器与控件条
+    // MARK: - 播放器
 
-    /// 设置/更新播放器，并按播放项状态决定要不要显示 AVKit 控件条。
+    /// 设置/更新播放器，并把播放器交给控制栏状态中枢（时间/状态按节拍自取）。
     func setPlayer(_ player: AVPlayer?) {
         if self.player !== player {
             self.player = player
             danmakuView?.player = player
         }
-        observeItemStatus()
+        controlsModel.bind(player: player)
     }
 
-    private func observeItemStatus() {
-        // SwiftUI 每次更新都会走到 setPlayer，但只有播放项真的换了才需要重装 KVO，
-        // 否则每轮更新都会拆掉再建一次观察者、还顺带重算一遍控件条样式。
-        applyControlsStyle()
-        let item = player?.currentItem
-        guard item !== observedItem else { return }
-        observedItem = item
-        itemStatusObservation?.invalidate()
-        itemStatusObservation = nil
-        guard let item else { return }
-        itemStatusObservation = item.observe(\.status, options: [.new, .initial]) { [weak self] _, _ in
-            Task { @MainActor in self?.applyControlsStyle() }
-        }
-        // 时长可能晚于 ready 才拿到（分片索引解析完才知道），拿到后要把控件条
-        // 从无时间轴样式补回成可拖动的浮动样式
-        itemDurationObservation = item.observe(\.duration, options: [.new]) { [weak self] _, _ in
-            Task { @MainActor in self?.applyControlsStyle() }
-        }
-    }
+    // MARK: - 弹幕与控制栏
 
-    /// 按播放项状态挑选原生控件条样式。
-    ///
-    /// 两条约束：
-    /// 1. 播放项就绪之前一律 `.none`——AVKit 的时间轴滑块拿到未就绪的播放项会崩。
-    /// 2. 直播项时长恒为不定值（NaN），只要控件条里带时间轴，AVKit 的
-    ///    `AVTimelineScrubberViewModel` 就会在控件条淡入的动画事务里触发内部
-    ///    precondition 崩溃（表现为进入直播间、画面刚出来就闪退）。所以直播
-    ///    固定用不含时间轴的 `.minimal`（保留播放/暂停与全屏按钮），VOD 才用
-    ///    可拖动的 `.floating`；VOD 万一拿不到时长也降级为 `.minimal`。
-    private func applyControlsStyle() {
-        let style = resolvedControlsStyle()
-        if controlsStyle != style {
-            controlsStyle = style
-        }
-    }
-
-    private func resolvedControlsStyle() -> AVPlayerViewControlsStyle {
-        guard let item = player?.currentItem, item.status == .readyToPlay else { return .none }
-        if isLive { return .minimal }
-        let seconds = item.duration.seconds
-        return seconds.isFinite && seconds > 0 ? .floating : .minimal
-    }
-
-    // MARK: - 弹幕
-
-    /// 把弹幕层挂到 AVKit 的内容覆盖层（画面之上、控件之下）。
+    /// 把弹幕层挂到 AVKit 的内容覆盖层（画面之上、自绘控制栏之下）。
     func installDanmaku(engine: DanmakuEngine, enabled: Bool) {
         danmakuEngine = engine
         danmakuEnabled = enabled
-        attachDanmakuIfNeeded()
-        DispatchQueue.main.async { [weak self] in self?.attachDanmakuIfNeeded() }
+        attachOverlaysIfNeeded()
+        DispatchQueue.main.async { [weak self] in self?.attachOverlaysIfNeeded() }
     }
 
     func setDanmakuEnabled(_ enabled: Bool) {
@@ -173,33 +122,64 @@ final class DanmakuPlayerView: AVPlayerView {
         danmakuView?.apply(settings: settings)
     }
 
-    func attachDanmakuIfNeeded() {
-        guard danmakuView == nil,
-              let engine = danmakuEngine,
-              let overlay = contentOverlayView else { return }
-        let view = DanmakuOverlayNSView(engine: engine, player: player)
-        view.enabled = danmakuEnabled
-        if let danmakuSettings { view.apply(settings: danmakuSettings) }
-        view.translatesAutoresizingMaskIntoConstraints = false
-        overlay.addSubview(view)
-        NSLayoutConstraint.activate([
-            view.leadingAnchor.constraint(equalTo: overlay.leadingAnchor),
-            view.trailingAnchor.constraint(equalTo: overlay.trailingAnchor),
-            view.topAnchor.constraint(equalTo: overlay.topAnchor),
-            view.bottomAnchor.constraint(equalTo: overlay.bottomAnchor),
-        ])
-        danmakuView = view
+    /// 装载自绘控制栏：全屏/画中画这类要直接操作播放器的动作在这里接线
+    func installControls(_ config: PlayerBarConfig) {
+        updateControls(config)
+        controlsModel.onToggleFullscreen = { [weak self] in self?.performToggleFullscreen() }
+        controlsModel.onTogglePictureInPicture = { [weak self] in self?.performTogglePictureInPicture() }
+        controlsModel.supportsPictureInPicture = Self.supportsPictureInPicture()
+        attachOverlaysIfNeeded()
+        DispatchQueue.main.async { [weak self] in self?.attachOverlaysIfNeeded() }
+    }
+
+    /// SwiftUI 每轮更新推入的控制栏配置（状态与动作）；页面快捷键与控制栏共用同一入口
+    func updateControls(_ config: PlayerBarConfig) {
+        controlsModel.apply(config)
+        onSpace = { [weak self] in self?.controlsModel.togglePlay() }
+        onSkip = { [weak self] in self?.controlsModel.skip(by: $0) }
+    }
+
+    /// 把弹幕层与自绘控制栏挂到 `contentOverlayView`（幂等；未就绪时由 layout 再试）。
+    /// 控制栏后挂，落在弹幕层之上，但两者都在画面之上、互不拦截鼠标。
+    func attachOverlaysIfNeeded() {
+        guard let overlay = contentOverlayView else { return }
+        if danmakuView == nil, let engine = danmakuEngine {
+            let view = DanmakuOverlayNSView(engine: engine, player: player)
+            view.enabled = danmakuEnabled
+            if let danmakuSettings { view.apply(settings: danmakuSettings) }
+            view.translatesAutoresizingMaskIntoConstraints = false
+            overlay.addSubview(view)
+            NSLayoutConstraint.activate([
+                view.leadingAnchor.constraint(equalTo: overlay.leadingAnchor),
+                view.trailingAnchor.constraint(equalTo: overlay.trailingAnchor),
+                view.topAnchor.constraint(equalTo: overlay.topAnchor),
+                view.bottomAnchor.constraint(equalTo: overlay.bottomAnchor),
+            ])
+            danmakuView = view
+        }
+        if controlsHost == nil {
+            let host = PlayerControlsHostView(model: controlsModel)
+            host.translatesAutoresizingMaskIntoConstraints = false
+            overlay.addSubview(host)
+            NSLayoutConstraint.activate([
+                host.leadingAnchor.constraint(equalTo: overlay.leadingAnchor),
+                host.trailingAnchor.constraint(equalTo: overlay.trailingAnchor),
+                host.topAnchor.constraint(equalTo: overlay.topAnchor),
+                host.bottomAnchor.constraint(equalTo: overlay.bottomAnchor),
+            ])
+            controlsHost = host
+        }
     }
 
     override func layout() {
         super.layout()
         // 布局过程中不能改视图树（会触发 layoutSubtreeIfNeeded 递归告警），延后一拍再挂
-        guard danmakuView == nil, danmakuEngine != nil, !attachScheduled else { return }
+        guard (danmakuView == nil && danmakuEngine != nil) || controlsHost == nil, !attachScheduled else { return }
         attachScheduled = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.attachScheduled = false
-            self.attachDanmakuIfNeeded()
+            self.attachOverlaysIfNeeded()
         }
     }
 
@@ -306,7 +286,7 @@ final class DanmakuPlayerView: AVPlayerView {
         }
     }
 
-    /// 交给 AVKit 自己的全屏入口——控件条上那个全屏按钮走的就是它。
+    /// 交给 AVKit 自己的全屏入口——自绘控制栏上的全屏按钮走的就是它。
     /// `enterFullScreen:` / `exitFullScreen:` 没有出现在公开头文件里，先探测再调用，
     /// 不可用时返回 false，由调用方退回窗口全屏。
     func toggleNativeFullscreen() -> Bool {
@@ -315,6 +295,25 @@ final class DanmakuPlayerView: AVPlayerView {
         guard responds(to: selector) else { return false }
         _ = perform(selector, with: nil)
         return true
+    }
+
+    /// 控制栏的全屏按钮：优先 AVKit 原生全屏（动画、弹幕跟随一致），系统不提供再退回窗口全屏
+    func performToggleFullscreen() {
+        guard toggleNativeFullscreen() else {
+            window?.toggleFullScreen(nil)
+            return
+        }
+    }
+
+    /// 控制栏的画中画按钮：调 AVKit 自己的画中画入口（与原生控件条按钮同一条路径）
+    func performTogglePictureInPicture() {
+        let selector = NSSelectorFromString("pictureInPictureButtonTapped:")
+        guard responds(to: selector) else { return }
+        _ = perform(selector, with: nil)
+    }
+
+    static func supportsPictureInPicture() -> Bool {
+        AVPlayerView().responds(to: NSSelectorFromString("pictureInPictureButtonTapped:"))
     }
 
     private func cancelHold() {
@@ -335,6 +334,7 @@ extension DanmakuPlayerView: AVPlayerViewDelegate {
     func playerViewWillEnterFullScreen(_ playerView: AVPlayerView) {
         isNativeFullscreen = true
         PlaybackMenuState.shared.setFullscreen(true)
+        controlsModel.setFullscreen(true)
         danmakuView?.beginSizeTransition(target: window?.screen?.frame.size
             ?? NSScreen.main?.frame.size)
     }
@@ -350,6 +350,7 @@ extension DanmakuPlayerView: AVPlayerViewDelegate {
     func playerViewDidExitFullScreen(_ playerView: AVPlayerView) {
         isNativeFullscreen = false
         PlaybackMenuState.shared.setFullscreen(false)
+        controlsModel.setFullscreen(false)
         danmakuView?.endSizeTransition()
     }
 }

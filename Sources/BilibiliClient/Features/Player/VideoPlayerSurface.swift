@@ -1,14 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// 视频播放组件：系统 AVPlayerView（画面 + 原生播放控件 + 原生全屏）+ 弹幕层。
+/// 视频播放组件：系统 AVPlayerView（画面 + 原生全屏）+ 弹幕层 + 自绘液态玻璃控制栏。
 ///
 /// 这个视图不包含任何窗口逻辑——它既可以直接放在播放页里（默认形态），
-/// 也可以在点击“分离窗口”时被放进按需创建的窗口中使用。播放与全屏（含全屏
-/// 动画）全部由 AVKit 负责，这里不再自绘播放/全屏控件。
+/// 也可以在点击“分离窗口”时被放进按需创建的窗口中使用。全屏（含全屏动画）
+/// 仍由 AVKit 负责，播放控件则是一条自绘的简洁控制栏（播放/进度/音量/倍速/
+/// 弹幕/画质/画中画/全屏），画面其余区域不放任何按钮。
 ///
-/// 观看人数、弹幕开关、分离窗口都不再浮在画面上：页内放在视频下方那一行
-/// （与清晰度切换同排），分离窗口里则完全交给系统控件条，画面全净。
+/// 观看人数、弹幕开关、分离窗口都不浮在画面上：页内放在视频下方那一行
+/// （与清晰度切换同排），分离窗口里则只有画面与这条控制栏。
 struct VideoPlayerSurface: View {
     @ObservedObject var playerController: PlayerController
     let engine: DanmakuEngine
@@ -24,13 +25,28 @@ struct VideoPlayerSurface: View {
                                   engine: engine,
                                   danmakuEnabled: danmakuEnabled,
                                   danmakuSettings: danmakuSettings,
-                                  isLive: false,
-                                  onSpace: { playerController.togglePlay() },
-                                  onSkip: { playerController.skip(by: $0) })
+                                  controls: controls)
                     .id(player)
             }
         }
         .clipped()
+    }
+
+    /// 自绘控制栏的输入：动作直接挂到 PlayerController，弹幕开关写回 @AppStorage
+    private var controls: PlayerBarConfig {
+        var config = PlayerBarConfig()
+        config.isLive = false
+        config.danmakuEnabled = danmakuEnabled
+        config.qualities = playerController.qualities
+        config.currentQualityId = playerController.currentQualityId
+        config.onTogglePlay = { playerController.togglePlay() }
+        config.onSeek = { playerController.seek(to: $0) }
+        config.onSkip = { playerController.skip(by: $0) }
+        config.onToggleDanmaku = { danmakuEnabled.toggle() }
+        config.onSelectQuality = { quality in
+            Task { await playerController.selectQuality(quality) }
+        }
+        return config
     }
 }
 
