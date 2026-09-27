@@ -48,8 +48,6 @@ final class PlayerBarModel: ObservableObject {
     @Published private(set) var duration: Double = 0
     @Published private(set) var isPlaying = false
     @Published private(set) var isBuffering = false
-    @Published private(set) var volume: Float = 1
-    @Published private(set) var isMuted = false
     @Published private(set) var isFullscreen = false
     @Published private(set) var speed: Float = 1
 
@@ -81,8 +79,6 @@ final class PlayerBarModel: ObservableObject {
             self.player = player
             if let player {
                 player.defaultRate = speed
-                player.volume = volume
-                player.isMuted = isMuted
             }
         }
         startTicking()
@@ -137,8 +133,6 @@ final class PlayerBarModel: ObservableObject {
         }
         isPlaying = player.timeControlStatus == .playing
         isBuffering = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
-        volume = player.volume
-        isMuted = player.isMuted
         if !isPlaying, !isScrubbing {
             // 暂停时控制栏常驻，避免找不到播放键
             isBarVisible = true
@@ -233,20 +227,6 @@ final class PlayerBarModel: ObservableObject {
         pokeActivity()
     }
 
-    func setVolume(_ value: Float) {
-        volume = value
-        isMuted = value <= 0
-        if let player {
-            player.volume = value
-            player.isMuted = value <= 0
-        }
-        pokeActivity()
-    }
-
-    func toggleMute() {
-        setVolume(isMuted ? max(volume, 0.5) : 0)
-    }
-
     func toggleDanmaku() {
         config.onToggleDanmaku()
         danmakuEnabled.toggle()
@@ -274,7 +254,7 @@ final class PlayerBarModel: ObservableObject {
 /// 自绘播放控制栏：液态玻璃胶囊，两层布局——顶部一整排是进度，下面一排是按钮。
 /// 悬停/移动鼠标时浮现，播放中闲置 2.5s 自动收起（弹幕设置打开时保持可见）。
 ///
-/// 内容按"简洁优先"取舍：播放/暂停 · 倍速 · 音量 · 弹幕开关 · 弹幕设置 · 画质 · 画中画 · 全屏。
+/// 内容按"简洁优先"取舍：播放/暂停 · 倍速 · 弹幕开关 · 弹幕设置 · 画质 · 画中画 · 全屏。
 /// 直播没有时间轴，进度排整体不显示，按钮排里换成"直播"徽标。
 /// 外观恒定深色：白天不刺眼，深浅两种系统外观下观感一致。
 struct PlayerControlBar: View {
@@ -307,7 +287,6 @@ struct PlayerControlBar: View {
                 Spacer(minLength: 10)
 
                 speedButton
-                volumeControl
 
                 if model.hasDanmakuToggle {
                     Button {
@@ -365,9 +344,9 @@ struct PlayerControlBar: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
         .background {
-            Capsule()
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(.black.opacity(0.30))
-                .glassEffect(.regular, in: .capsule)
+                .glassEffect(.regular, in: .rect(cornerRadius: 18))
         }
         // 恒定深色外观：白天不刺眼，与深色系统外观下完全一致
         .environment(\.colorScheme, .dark)
@@ -434,7 +413,7 @@ struct PlayerControlBar: View {
         }
     }
 
-    // MARK: 倍速 / 音量
+    // MARK: 倍速
 
     /// 独立的倍速调节按钮：点开倍速菜单，按钮上直接显示当前倍速
     private var speedButton: some View {
@@ -469,38 +448,6 @@ struct PlayerControlBar: View {
 
     private func speedText(_ value: Float) -> String {
         String(format: "%g×", value)
-    }
-
-    private var volumeControl: some View {
-        HStack(spacing: 5) {
-            Button {
-                model.toggleMute()
-            } label: {
-                Image(systemName: volumeIcon)
-                    .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 24, height: 22)
-            }
-            .controlPill()
-            .help(model.isMuted ? "取消静音" : "静音")
-
-            Slider(
-                value: Binding(
-                    get: { Double(model.isMuted ? 0 : model.volume) },
-                    set: { model.setVolume(Float($0)) }
-                ),
-                in: 0...1
-            )
-            .controlSize(.mini)
-            .tint(.white)
-            .frame(width: 54)
-        }
-    }
-
-    private var volumeIcon: String {
-        if model.isMuted || model.volume <= 0 { return "speaker.slash.fill" }
-        if model.volume < 0.34 { return "speaker.wave.1.fill" }
-        if model.volume < 0.67 { return "speaker.wave.2.fill" }
-        return "speaker.wave.3.fill"
     }
 
     // MARK: 画质
@@ -548,9 +495,10 @@ private struct ControlPill: ViewModifier {
             .padding(.horizontal, 5)
             .frame(height: 24)
             .background {
-                Capsule().fill(.white.opacity(hovering ? 0.16 : 0.001))
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(.white.opacity(hovering ? 0.16 : 0.001))
             }
-            .contentShape(Capsule())
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             .onHover { hovering = $0 }
     }
 }

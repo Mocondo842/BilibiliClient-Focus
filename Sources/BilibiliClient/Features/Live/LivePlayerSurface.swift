@@ -3,7 +3,7 @@ import SwiftUI
 
 /// 直播播放组件：系统 AVPlayerView（画面 + 原生全屏）+ 自绘液态玻璃控制栏 + 在线人数徽标。
 /// 全屏（含全屏动画）由 AVKit 负责；控制栏是直播变体：没有时间轴（换成"直播"徽标），
-/// 也没有弹幕开关与画质入口，只保留播放/倍速/音量/画中画/全屏。
+/// 也没有弹幕开关与画质入口，只保留播放/倍速/画中画/全屏。
 struct LivePlayerSurface: View {
     @ObservedObject var model: LivePlayerModel
 
