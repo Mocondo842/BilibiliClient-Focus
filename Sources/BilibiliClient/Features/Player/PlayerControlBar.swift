@@ -256,7 +256,7 @@ final class PlayerBarModel: ObservableObject {
 ///
 /// 内容按"简洁优先"取舍：播放/暂停 · 倍速 · 弹幕开关 · 弹幕设置 · 画质 · 画中画 · 全屏。
 /// 直播没有时间轴，进度排整体不显示，按钮排里换成"直播"徽标。
-/// 外观恒定深色：白天不刺眼，深浅两种系统外观下观感一致。
+/// 外观随系统深浅自适应，弹幕设置卡片等弹层也跟随系统配色。
 struct PlayerControlBar: View {
     @ObservedObject var model: PlayerBarModel
     @State private var showDanmakuSettings = false
@@ -340,20 +340,17 @@ struct PlayerControlBar: View {
             }
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.white.opacity(0.92))
+        .foregroundStyle(.primary)
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
         .background {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.black.opacity(0.30))
+                .fill(.white.opacity(0.06))
                 .glassEffect(.regular, in: .rect(cornerRadius: 18))
         }
-        // 恒定深色外观：白天不刺眼，与深色系统外观下完全一致
-        .environment(\.colorScheme, .dark)
         .onHover { model.setHoveringBar($0) }
         .popover(isPresented: $showDanmakuSettings, arrowEdge: .bottom) {
             DanmakuSettingsCard()
-                .environment(\.colorScheme, .dark)
         }
         .onChange(of: showDanmakuSettings) { _, open in
             model.setPanelOpen(open)
@@ -378,7 +375,7 @@ struct PlayerControlBar: View {
             Text(Formatters.duration(Int(model.duration)))
                 .font(.system(size: 11, weight: .medium))
                 .monospacedDigit()
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.secondary)
                 .frame(width: 48, alignment: .trailing)
         }
     }
@@ -400,7 +397,7 @@ struct PlayerControlBar: View {
             }
         }
         .controlSize(.small)
-        .tint(.white)
+        .tint(.primary)
     }
 
     private var liveBadge: some View {
@@ -496,7 +493,7 @@ private struct ControlPill: ViewModifier {
             .frame(height: 24)
             .background {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(.white.opacity(hovering ? 0.16 : 0.001))
+                    .fill(.primary.opacity(hovering ? 0.12 : 0.001))
             }
             .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             .onHover { hovering = $0 }
@@ -526,12 +523,6 @@ final class PlayerControlsHostView: NSView {
         self.model = model
         self.barView = NSHostingView(rootView: PlayerControlBar(model: model))
         super.init(frame: .zero)
-
-        // 控制栏恒定深色外观：白天不刺眼，深浅两种系统外观下观感一致
-        // （材质/文字都按 darkAqua 渲染，弹出的弹幕设置面板同样跟随）
-        let dark = NSAppearance(named: .darkAqua)
-        appearance = dark
-        barView.appearance = dark
 
         barView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(barView)
