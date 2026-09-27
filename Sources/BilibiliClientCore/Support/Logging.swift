@@ -10,24 +10,24 @@ import os
 /// `.debug` 级别默认不持久化，开销可以忽略。
 ///
 /// 用法：`AppLog.live.info("…")`、`AppLog.network.debug("…")`。
-enum AppLog {
+public enum AppLog {
     /// App 生命周期、启动与更新
-    static let app = Logger(label: "app")
+    public static let app = Logger(label: "app")
     /// B 站 REST 接口请求
-    static let network = Logger(label: "network")
+    public static let network = Logger(label: "network")
     /// 播放器、本地 HLS 代理、分片解析
-    static let player = Logger(label: "player")
+    public static let player = Logger(label: "player")
     /// 视频弹幕与渲染
-    static let danmaku = Logger(label: "danmaku")
+    public static let danmaku = Logger(label: "danmaku")
     /// 直播间与直播弹幕 WebSocket
-    static let live = Logger(label: "live")
+    public static let live = Logger(label: "live")
     /// 登录态、钥匙串、Cookie
-    static let auth = Logger(label: "auth")
+    public static let auth = Logger(label: "auth")
 
     /// 安装日志后端。整个进程只装一次。
     ///
     /// 必须在第一次取用上面任意一个 `Logger` 之前调用——App 里就是 `BilibiliClientApp.init()`。
-    static func bootstrap() {
+    public static func bootstrap() {
         guard !installed else { return }
         installed = true
         LoggingSystem.bootstrap { OSLogHandler(label: $0) }

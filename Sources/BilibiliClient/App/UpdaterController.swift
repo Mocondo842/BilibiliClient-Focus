@@ -1,5 +1,6 @@
 import Foundation
 import Sparkle
+import BilibiliClientCore
 
 /// 自动更新（Sparkle）。
 ///
@@ -8,8 +9,10 @@ import Sparkle
 /// 用 `SUPublicEDKey` 校验 EdDSA 签名、再校验新 App 的代码签名，然后就地替换并重启。
 ///
 /// 发布侧流程见 `scripts/release.sh`（打包 → generate_appcast 签名 → 上传 GitHub Release）。
+/// Sparkle 实现的 `AppUpdater`。共享层只认协议（Sparkle 不能进 iOS 依赖图），
+/// 由 macOS 入口在启动时注入到 `AppUpdaterStore.shared`。
 @MainActor
-final class UpdaterController {
+final class UpdaterController: AppUpdater {
     static let shared = UpdaterController()
 
     private let controller: SPUStandardUpdaterController

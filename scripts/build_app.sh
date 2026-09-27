@@ -23,16 +23,16 @@ fi
 echo "Using SDK: $SDKROOT"
 
 # 生成构建信息（版本号单点来源：version.txt）
-mkdir -p "Sources/BilibiliClient/Core/Generated"
-cat > "Sources/BilibiliClient/Core/Generated/BuildInfo.generated.swift" <<SWIFT
+mkdir -p "Sources/BilibiliClientCore/Generated"
+cat > "Sources/BilibiliClientCore/Generated/BuildInfo.generated.swift" <<SWIFT
 // 由 scripts/build_app.sh 自动生成，请勿手改。
-enum BuildInfo {
-    static let version = "$VERSION"
-    static let build = "$BUILD"
+public enum BuildInfo {
+    public static let version = "$VERSION"
+    public static let build = "$BUILD"
 }
 SWIFT
 
-if ! build_log=$(swift build -c "$CONFIG" --disable-sandbox 2>&1); then
+if ! build_log=$(swift build -c "$CONFIG" --product BilibiliClient --disable-sandbox 2>&1); then
   # 沙箱环境偶发阻止 dSYM 生成：只要 release 二进制已产出且失败点确实是 dSYM，就直接使用
   if [ "$CONFIG" = "release" ] && [ -x ".build/out/Products/Release/$APP_NAME" ] \
      && printf '%s' "$build_log" | grep -q "GenerateDSYMFile"; then
@@ -40,7 +40,7 @@ if ! build_log=$(swift build -c "$CONFIG" --disable-sandbox 2>&1); then
   elif [ "$CONFIG" = "release" ]; then
     echo "Release build failed, 回退到 debug 构建..."
     CONFIG="debug"
-    swift build -c "$CONFIG" --disable-sandbox
+    swift build -c "$CONFIG" --product BilibiliClient --disable-sandbox
   else
     printf '%s\n' "$build_log" | tail -30
     exit 1

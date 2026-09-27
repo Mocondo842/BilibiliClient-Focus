@@ -41,12 +41,12 @@ case "$SDK_KIND" in
 esac
 
 # 生成构建信息（版本号单点来源：version.txt，与 macOS 侧共用同一份）
-mkdir -p "Sources/BilibiliClient/Core/Generated"
-cat > "Sources/BilibiliClient/Core/Generated/BuildInfo.generated.swift" <<SWIFT
+mkdir -p "Sources/BilibiliClientCore/Generated"
+cat > "Sources/BilibiliClientCore/Generated/BuildInfo.generated.swift" <<SWIFT
 // 由 scripts/build_app.sh / scripts/build_ios_app.sh 自动生成，请勿手改。
-enum BuildInfo {
-    static let version = "$VERSION"
-    static let build = "$BUILD"
+public enum BuildInfo {
+    public static let version = "$VERSION"
+    public static let build = "$BUILD"
 }
 SWIFT
 

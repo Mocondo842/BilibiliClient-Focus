@@ -3,20 +3,20 @@ import SwiftUI
 
 /// 全局导航路由：供菜单栏卡片等“主界面之外”的位置触发主窗口跳转。
 @MainActor
-final class AppRouter: ObservableObject {
-    static let shared = AppRouter()
+public final class AppRouter: ObservableObject {
+    public static let shared = AppRouter()
 
     /// 主窗口详情区的导航路径
-    @Published var path = NavigationPath()
+    @Published public var path = NavigationPath()
 
     /// 跳转到指定视频详情：激活主窗口（若被隐藏则一并唤回）并推入对应页面。
-    func openVideo(_ bvid: String) {
+    public func openVideo(_ bvid: String) {
         path.append(bvid)
         openMain()
     }
 
     /// 回到主界面：激活并前置主窗口。
-    func openMain() {
+    public func openMain() {
         // 始终唤回同一个主窗口（排除菜单栏 popover 面板）
         AppDelegate.shared?.showDockIcon()
         AppDelegate.mainWindow()?.makeKeyAndOrderFront(nil)

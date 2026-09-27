@@ -18,14 +18,14 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
 }
 
 /// 关闭主窗口时的行为（完全退出 / 菜单栏模式 / 每次询问）
-enum CloseBehavior: String, CaseIterable, Identifiable {
+public enum CloseBehavior: String, CaseIterable, Identifiable {
     case quit
     case menuBar
     case ask
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
-    var label: String {
+    public var label: String {
         switch self {
         case .quit: return "完全退出"
         case .menuBar: return "菜单栏模式"
@@ -33,7 +33,7 @@ enum CloseBehavior: String, CaseIterable, Identifiable {
         }
     }
 
-    static var current: CloseBehavior {
+    public static var current: CloseBehavior {
         CloseBehavior(rawValue: UserDefaults.standard.string(forKey: "closeBehavior") ?? "") ?? .ask
     }
 }
@@ -271,33 +271,37 @@ struct SettingsView: View {
         }
     }
 
-    /// 自动更新（Sparkle）：开关 + 手动检查
+    /// 自动更新（macOS 走 Sparkle）：开关 + 手动检查。
+    ///
+    /// 只有注入了 `AppUpdater` 的平台才显示；iOS 不提供应用内更新入口，整块隐藏。
     @ViewBuilder
     private var updateRows: some View {
-        Toggle("自动检查更新", isOn: Binding(
-            get: { UpdaterController.shared.automaticallyChecksForUpdates },
-            set: { UpdaterController.shared.automaticallyChecksForUpdates = $0 }
-        ))
-        .font(.body)
+        if let updater = AppUpdaterStore.shared {
+            Toggle("自动检查更新", isOn: Binding(
+                get: { updater.automaticallyChecksForUpdates },
+                set: { updater.automaticallyChecksForUpdates = $0 }
+            ))
+            .font(.body)
 
-        Toggle("自动下载并安装", isOn: Binding(
-            get: { UpdaterController.shared.automaticallyDownloadsUpdates },
-            set: { UpdaterController.shared.automaticallyDownloadsUpdates = $0 }
-        ))
-        .font(.body)
-        .disabled(!UpdaterController.shared.automaticallyChecksForUpdates)
+            Toggle("自动下载并安装", isOn: Binding(
+                get: { updater.automaticallyDownloadsUpdates },
+                set: { updater.automaticallyDownloadsUpdates = $0 }
+            ))
+            .font(.body)
+            .disabled(!updater.automaticallyChecksForUpdates)
 
-        optionRow("版本更新") {
-            Button("检查更新…") {
-                UpdaterController.shared.checkForUpdates()
+            optionRow("版本更新") {
+                Button("检查更新…") {
+                    updater.checkForUpdates()
+                }
+                .disabled(!updater.canCheckForUpdates)
             }
-            .disabled(!UpdaterController.shared.canCheckForUpdates)
-        }
 
-        if let last = UpdaterController.shared.lastUpdateCheckDate {
-            Text("上次检查：\(last.formatted(date: .abbreviated, time: .shortened))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if let last = updater.lastUpdateCheckDate {
+                Text("上次检查：\(last.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

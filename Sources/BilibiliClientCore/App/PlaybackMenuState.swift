@@ -6,19 +6,19 @@ import SwiftUI
 /// 菜单属于 App 级（`Commands`），拿不到播放页内部的状态，所以播放页在出现时把
 /// 三个开关的读写挂到这里；菜单项据此决定标题、勾选与可用性。播放页离开时解除绑定。
 @MainActor
-final class PlaybackMenuState: ObservableObject {
-    static let shared = PlaybackMenuState()
+public final class PlaybackMenuState: ObservableObject {
+    public static let shared = PlaybackMenuState()
 
     /// 当前是否停在视频播放页
-    @Published private(set) var isActive = false
+    @Published public private(set) var isActive = false
     /// 弹幕开关状态
-    @Published private(set) var danmakuEnabled = true
+    @Published public private(set) var danmakuEnabled = true
     /// 画面是否已分离到独立窗口
-    @Published private(set) var isDetached = false
+    @Published public private(set) var isDetached = false
     /// 播放器是否处于原生全屏
-    @Published private(set) var isFullscreen = false
+    @Published public private(set) var isFullscreen = false
     /// 是否已经挂上可操作的播放器（全屏开关需要它）
-    @Published private(set) var hasPlayer = false
+    @Published public private(set) var hasPlayer = false
 
     private var toggleDanmakuAction: (() -> Void)?
     private var toggleDetachAction: (() -> Void)?
@@ -71,12 +71,12 @@ final class PlaybackMenuState: ObservableObject {
 
     // MARK: - 菜单动作
 
-    func performToggleDanmaku() { toggleDanmakuAction?() }
-    func performToggleDetach() { toggleDetachAction?() }
+    public func performToggleDanmaku() { toggleDanmakuAction?() }
+    public func performToggleDetach() { toggleDetachAction?() }
 
     /// 切换视频全屏：优先走 AVKit 自己的全屏入口（与控件条上的全屏按钮同一条路径，
     /// 动画、弹幕跟随完全一致）；系统不再提供该入口时退回窗口全屏。
-    func performToggleFullscreen() {
+    public func performToggleFullscreen() {
         guard let view = playerView else { return }
         guard view.toggleNativeFullscreen() else {
             view.window?.toggleFullScreen(nil)

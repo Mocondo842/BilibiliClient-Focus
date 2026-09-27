@@ -3,10 +3,10 @@ import SwiftUI
 
 /// 播放窗口（普通窗口）：只有点“分离窗口”时才按需创建，
 /// 窗口里装的就是页面里同一个播放组件，不再有常驻钉位的特殊窗口。
-final class PlayerHostWindow: NSWindow {
+public final class PlayerHostWindow: NSWindow {
     /// 无边框窗口默认不能成为 key 窗口，收不到键盘事件
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
+    public override var canBecomeKey: Bool { true }
+    public override var canBecomeMain: Bool { true }
 }
 
 /// 播放窗口的创建/销毁/分离状态管理。

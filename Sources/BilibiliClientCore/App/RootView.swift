@@ -1,24 +1,26 @@
 import AppKit
 import SwiftUI
 
-struct UpRoute: Hashable {
+public struct UpRoute: Hashable {
     let mid: Int
 }
 
-struct PartitionRoute: Hashable {
+public struct PartitionRoute: Hashable {
     let tid: Int
     let name: String
 }
 
-struct SearchRoute: Hashable {
+public struct SearchRoute: Hashable {
     let query: String
 }
 
-struct DynamicRoute: Hashable {
+public struct DynamicRoute: Hashable {
     let id: String
 }
 
-struct RootView: View {
+public struct RootView: View {
+    public init() {}
+
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var router: AppRouter
     @AppStorage("appearance") private var appearance = AppearanceMode.system.rawValue
@@ -67,7 +69,7 @@ struct RootView: View {
         }
     }
 
-    var body: some View {
+    public var body: some View {
         NavigationSplitView {
             sidebar
                 .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 270)

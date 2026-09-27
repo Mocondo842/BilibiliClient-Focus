@@ -11,7 +11,7 @@ import Nuke
 /// 2. **两级缓存按图片场景配置**：内存按成本计费 + 磁盘缓存（可缓存处理后的变体），
 ///    滚动回去不再重新下载/解码。
 /// 3. **预取**：列表加载后把这一页的图先拉好，滚动到时直接命中。
-enum BiliImages {
+public enum BiliImages {
     /// 统一管线：NukeUI 的 `LazyImage` 默认走 `ImagePipeline.shared`，启动时把它换掉
     static let pipeline: ImagePipeline = {
         var configuration = ImagePipeline.Configuration()
@@ -36,7 +36,7 @@ enum BiliImages {
     }
 
     /// App 启动时调用一次
-    static func install() {
+    public static func install() {
         ImagePipeline.shared = pipeline
     }
 

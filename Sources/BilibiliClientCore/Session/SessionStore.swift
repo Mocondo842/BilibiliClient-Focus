@@ -1,9 +1,9 @@
 import Foundation
 
 @MainActor
-final class SessionStore: ObservableObject {
+public final class SessionStore: ObservableObject {
     /// 全局共享实例：主界面与菜单栏卡片共用同一登录状态。
-    static let shared = SessionStore()
+    public static let shared = SessionStore()
 
     @Published var loggedIn = false
     @Published var user: UserProfile?

@@ -9,8 +9,8 @@ import MediaPlayer
 /// 媒体键由系统截获后以 MPRemoteCommand 事件送达，App 在后台也能响应；
 /// 同时向 MPNowPlayingInfoCenter 上报标题/时长/进度，控制中心可显示与拖动进度。
 @MainActor
-final class SystemMediaCenter {
-    static let shared = SystemMediaCenter()
+public final class SystemMediaCenter {
+    public static let shared = SystemMediaCenter()
 
     private weak var player: PlayerController?
     private var title = ""
@@ -31,7 +31,7 @@ final class SystemMediaCenter {
 
     // MARK: - 安装
 
-    func install() {
+    public func install() {
         guard !installed else { return }
         installed = true
         registerRemoteCommands()

@@ -1,9 +1,14 @@
 import SwiftUI
 
 /// 菜单栏弹出的卡片：顶部用户信息，下方单列动态流，点击视频跳转主界面。
-struct MenuBarPanelView: View {
+public struct MenuBarPanelView: View {
     @ObservedObject var session: SessionStore
     @ObservedObject var router: AppRouter
+
+    public init(session: SessionStore, router: AppRouter) {
+        self.session = session
+        self.router = router
+    }
 
     @State private var items: [DynamicItem] = []
     @State private var offset: String?
@@ -14,7 +19,7 @@ struct MenuBarPanelView: View {
     @State private var errorMessage: String?
     @State private var showLogin = false
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             header
             Divider()

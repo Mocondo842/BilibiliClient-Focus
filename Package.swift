@@ -19,18 +19,38 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.15.1"),
     ],
     targets: [
-        .executableTarget(
-            name: "BilibiliClient",
+        // 共享层：网络、模型、会话、UI 组件与全部功能页面。macOS 与 iOS 共用同一份
+        // 源码，平台差异就地用 #if os(macOS) / #if os(iOS) 分支，不复制第二棵树。
+        .target(
+            name: "BilibiliClientCore",
             dependencies: [
                 .product(name: "Nuke", package: "Nuke"),
                 .product(name: "NukeUI", package: "Nuke"),
-                .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "Textual", package: "textual"),
                 .product(name: "Collections", package: "swift-collections"),
                 .product(name: "Logging", package: "swift-log"),
             ],
+            path: "Sources/BilibiliClientCore"
+        ),
+        // macOS App（原有目标，产品名仍是 BilibiliClient，构建脚本无需改产物路径）：
+        // 只放 App 入口与 Sparkle 自动更新，其余都在共享层。
+        .executableTarget(
+            name: "BilibiliClient",
+            dependencies: [
+                .target(name: "BilibiliClientCore"),
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
             path: "Sources/BilibiliClient"
-        )
+        ),
+        // iOS App（iPhone / iPad）：只放 App 入口。**不能**依赖 Sparkle —— 它的
+        // XCFramework 只有 macOS slice，在 iOS 上会让整个构建在规划阶段就失败。
+        .executableTarget(
+            name: "BilibiliClientiOS",
+            dependencies: [
+                .target(name: "BilibiliClientCore"),
+            ],
+            path: "Sources/BilibiliClientiOS"
+        ),
     ],
     swiftLanguageModes: [.v5]
 )
