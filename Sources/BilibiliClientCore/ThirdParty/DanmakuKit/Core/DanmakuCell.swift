@@ -109,7 +109,14 @@ extension DanmakuCell {
         guard let layer = layer as? DanmakuAsyncLayer else { return }
 
         layer.contentsScale = PlatformScreen.mainScale(fallback: 1)
-        
+
+        // 弹幕单元是透明底的，位图必须走透明分支。
+        // UIKit 的 `UIView.isOpaque` 默认为 true 并会被同步到 backing layer，
+        // 于是 `DanmakuAsyncLayer.display()` 判定为不透明位图，会先铺一层白底——
+        // 这就是 iOS 上「弹幕背后有一层白色色块」的来源。
+        // macOS 的 `NSView.isOpaque` 默认就是 false，所以这一行在 macOS 上是空操作。
+        layer.isOpaque = false
+
         layer.willDisplay = { [weak self] _ in
             guard let strongSelf = self else { return }
             strongSelf.willDisplay()

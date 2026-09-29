@@ -25,7 +25,7 @@ echo "Using SDK: $SDKROOT"
 # 生成构建信息（版本号单点来源：version.txt）
 mkdir -p "Sources/BilibiliClientCore/Generated"
 cat > "Sources/BilibiliClientCore/Generated/BuildInfo.generated.swift" <<SWIFT
-// 由 scripts/build_app.sh 自动生成，请勿手改。
+// 由 scripts/build_app.sh / scripts/build_ios_app.sh 自动生成，请勿手改。
 public enum BuildInfo {
     public static let version = "$VERSION"
     public static let build = "$BUILD"

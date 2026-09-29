@@ -137,18 +137,33 @@ public class DanmakuAsyncLayer: CALayer {
                     context.saveGState()
                     if backgroundColor == nil || (backgroundColor?.alpha ?? 0) < 1 {
                         context.setFillColor(UIColor.white.cgColor)
-                        context.addRect(CGRect(x: 0, y: 0, width: size.width * scale, height: size.height * scale))
+                        // `UIGraphicsBeginImageContextWithOptions` 交出的上下文坐标已经是**点**（scale 已折算进 CTM），
+                        // 这里不能再乘 `scale`，否则白底矩形会是位图的 scale² 倍、整格铺满。
+                        // 与上面 macOS 分支的 `CGRect(origin: .zero, size: size)` 保持一致。
+                        context.addRect(CGRect(origin: .zero, size: size))
                         context.fillPath()
                     }
                     if let backgroundColor = backgroundColor {
                         context.setFillColor(backgroundColor)
-                        context.addRect(CGRect(x: 0, y: 0, width: size.width * scale, height: size.height * scale))
+                        // `UIGraphicsBeginImageContextWithOptions` 交出的上下文坐标已经是**点**（scale 已折算进 CTM），
+                        // 这里不能再乘 `scale`，否则白底矩形会是位图的 scale² 倍、整格铺满。
+                        // 与上面 macOS 分支的 `CGRect(origin: .zero, size: size)` 保持一致。
+                        context.addRect(CGRect(origin: .zero, size: size))
                         context.fillPath()
                     }
                     context.restoreGState()
                 }
                 #endif
+                #if os(macOS)
                 self.displaying?(context, size, isCancelled)
+                #else
+                // Core Text 按 **Y 向上** 绘制，而 `UIGraphicsBeginImageContextWithOptions`
+                // 交出的上下文是 **Y 向下**（UIKit 约定）。不翻转，弹幕文字会被上下镜像
+                // ——这正是 iOS 上「弹幕颠倒」的原因。翻成 Y 向上后与 macOS 分支逐像素一致。
+                context.translateBy(x: 0, y: size.height)
+                context.scaleBy(x: 1, y: -1)
+                self.displaying?(context, size, isCancelled)
+                #endif
                 if isCancelled() {
                     #if os(macOS)
                     // no UIGraphics context to end on macOS
@@ -231,6 +246,9 @@ public class DanmakuAsyncLayer: CALayer {
                 UIGraphicsEndImageContext()
                 return
             }
+            // 同上：翻成 Y 向上，Core Text 才画得正。
+            context.translateBy(x: 0, y: bounds.size.height)
+            context.scaleBy(x: 1, y: -1)
             displaying?(context, bounds.size, {() -> Bool in return false})
             let image = UIGraphicsGetImageFromCurrentImageContext()
             UIGraphicsEndImageContext()

@@ -71,10 +71,11 @@ class DanmakuFloatingTrack: NSObject, DanmakuTrack, CAAnimationDelegate {
     var positionY: CGFloat = 0 {
         didSet {
             // Match DanmuKitMac behavior: do not mutate CALayer position on macOS while animating.
-            // iOS can adjust layer.position.y to keep centered vertically on layout changes.
+            // iOS 这里同样**只能用 `frame`**：`layer.position` 的 Y 方向取决于图层几何是否翻转，
+            // 与视图 `frame` 未必一致，这正是 iOS 上弹幕整体上下颠倒的来源。
             #if !os(macOS)
             cells.forEach {
-                $0.layer.position.y = positionY
+                $0.frame.origin.y = positionY - $0.bounds.height / 2.0
             }
             #endif
         }
@@ -102,11 +103,9 @@ class DanmakuFloatingTrack: NSObject, DanmakuTrack, CAAnimationDelegate {
     
     func shoot(danmaku: DanmakuCell) {
         cells.append(danmaku)
-        #if os(macOS)
+        // 两端统一用 `frame`（视图坐标，Y 向下）：`layer.position` 的 Y 方向依赖图层几何，
+        // 与 `frame` 未必一致，是 iOS 上弹幕上下颠倒的来源。
         danmaku.frame = CGRect(x: view!.bounds.width, y: positionY - danmaku.bounds.height / 2.0, width: danmaku.bounds.width, height: danmaku.bounds.height)
-        #else
-        danmaku.layer.position = CGPoint(x: view!.bounds.width + danmaku.bounds.width / 2.0, y: positionY)
-        #endif
         danmaku.model?.track = index
         prepare(danmaku: danmaku)
         addAnimation(to: danmaku)
@@ -310,13 +309,10 @@ class DanmakuVerticalTrack: NSObject, DanmakuTrack, CAAnimationDelegate {
     var positionY: CGFloat = 0 {
         didSet {
             cells.forEach {
-                #if os(macOS)
+                // 统一用 `frame`（视图坐标，Y 向下），见 `DanmakuFloatingTrack.positionY` 的说明。
                 let originX = (view!.bounds.width - $0.bounds.width) / 2.0
                 let originY = positionY - $0.bounds.height / 2.0
                 $0.frame.origin = CGPoint(x: originX, y: originY)
-                #else
-                $0.layer.position = CGPoint(x: view!.bounds.width / 2.0, y: positionY)
-                #endif
             }
         }
     }
@@ -343,14 +339,11 @@ class DanmakuVerticalTrack: NSObject, DanmakuTrack, CAAnimationDelegate {
     
     func shoot(danmaku: DanmakuCell) {
         cells.append(danmaku)
-        #if os(macOS)
+        // 统一用 `frame`（视图坐标，Y 向下），见 `DanmakuFloatingTrack.positionY` 的说明。
         let originX = (view!.bounds.width - danmaku.bounds.width) / 2.0
         let originY = positionY - danmaku.bounds.height / 2.0
         danmaku.frame = CGRect(x: originX, y: originY, width: danmaku.bounds.width, height: danmaku.bounds.height)
         danmaku.backingLayer?.opacity = 1
-        #else
-        danmaku.layer.position = CGPoint(x: view!.bounds.width / 2.0, y: positionY)
-        #endif
         danmaku.model?.track = index
         prepare(danmaku: danmaku)
         addAnimation(to: danmaku)
@@ -426,15 +419,11 @@ class DanmakuVerticalTrack: NSObject, DanmakuTrack, CAAnimationDelegate {
         cells.append(danmaku)
         danmaku.animationTime = model.displayTime * Double(progress)
         danmaku.model?.track = index
-        #if os(macOS)
+        // 统一用 `frame`（视图坐标，Y 向下），见 `DanmakuFloatingTrack.positionY` 的说明。
         let originX = (view!.bounds.width - danmaku.bounds.width) / 2.0
         let originY = positionY - danmaku.bounds.height / 2.0
         danmaku.frame = CGRect(x: originX, y: originY, width: danmaku.bounds.width, height: danmaku.bounds.height)
         danmaku.backingLayer?.opacity = 1
-        #else
-        danmaku.layer.position = CGPoint(x: view!.bounds.width / 2.0, y: positionY)
-        danmaku.layer.opacity = 1
-        #endif
     }
     
     func syncAndPlay(_ danmaku: DanmakuCell, at progress: Float) {

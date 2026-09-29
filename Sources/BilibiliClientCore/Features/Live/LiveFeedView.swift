@@ -57,7 +57,7 @@ struct LiveFeedView: View {
         }
         .navigationTitle("直播")
         .autoLoadMore { await loadMore() }
-        .refreshable { await load() }
+        .feedRefreshable { await load() }
         .toolbar {
             ToolbarItem {
                 Button {

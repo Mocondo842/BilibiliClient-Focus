@@ -104,7 +104,7 @@ struct WatchLaterView: View {
             .frame(maxWidth: .infinity)
             .padding(20)
         }
-        .refreshable { await load() }
+        .feedRefreshable { await load() }
     }
 
     private func row(_ item: ToViewItem) -> some View {

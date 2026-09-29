@@ -90,18 +90,18 @@ public struct RootView: View {
         // TabContent，不 conform View）。侧边栏里的「浏览 / 我的」分组与 macOS 侧边栏一致。
         TabView(selection: $selection) {
             TabSection("浏览") {
-                Tab("推荐", systemImage: SidebarItem.home.icon, value: SidebarItem.home) { detailStack }
-                Tab("分区", systemImage: SidebarItem.zones.icon, value: SidebarItem.zones) { detailStack }
-                Tab("热门", systemImage: SidebarItem.popular.icon, value: SidebarItem.popular) { detailStack }
-                Tab("直播", systemImage: SidebarItem.live.icon, value: SidebarItem.live) { detailStack }
-                Tab("动态", systemImage: SidebarItem.dynamics.icon, value: SidebarItem.dynamics) { detailStack }
+                Tab("推荐", systemImage: SidebarItem.home.icon, value: SidebarItem.home) { tabStack(.home) }
+                Tab("分区", systemImage: SidebarItem.zones.icon, value: SidebarItem.zones) { tabStack(.zones) }
+                Tab("热门", systemImage: SidebarItem.popular.icon, value: SidebarItem.popular) { tabStack(.popular) }
+                Tab("直播", systemImage: SidebarItem.live.icon, value: SidebarItem.live) { tabStack(.live) }
+                Tab("动态", systemImage: SidebarItem.dynamics.icon, value: SidebarItem.dynamics) { tabStack(.dynamics) }
             }
             TabSection("我的") {
-                Tab("收藏", systemImage: SidebarItem.favorites.icon, value: SidebarItem.favorites) { detailStack }
-                Tab("历史", systemImage: SidebarItem.history.icon, value: SidebarItem.history) { detailStack }
-                Tab("稍后再看", systemImage: SidebarItem.watchLater.icon, value: SidebarItem.watchLater) { detailStack }
+                Tab("收藏", systemImage: SidebarItem.favorites.icon, value: SidebarItem.favorites) { tabStack(.favorites) }
+                Tab("历史", systemImage: SidebarItem.history.icon, value: SidebarItem.history) { tabStack(.history) }
+                Tab("稍后再看", systemImage: SidebarItem.watchLater.icon, value: SidebarItem.watchLater) { tabStack(.watchLater) }
             }
-            Tab("设置", systemImage: SidebarItem.settings.icon, value: SidebarItem.settings) { detailStack }
+            Tab("设置", systemImage: SidebarItem.settings.icon, value: SidebarItem.settings) { tabStack(.settings) }
         }
         .tabViewStyle(.sidebarAdaptable)
         .tabViewSidebarFooter {
@@ -119,52 +119,21 @@ public struct RootView: View {
     /// 详情区：macOS 与 iOS 共用同一套页面与导航目的地。
     private var detailStack: some View {
         NavigationStack(path: $router.path) {
-            Group {
-                switch selection {
-                case .home:
-                    RecommendView()
-                case .zones:
-                    ZonesView()
-                case .popular:
-                    PopularView()
-                case .live:
-                    LiveFeedView()
-                case .search:
-                    SearchView(query: submittedQuery)
-                case .dynamics:
-                    DynamicFeedView()
-                case .favorites:
-                    FavoritesView()
-                case .history:
-                    HistoryView()
-                case .watchLater:
-                    WatchLaterView()
-                case .settings:
-                    SettingsView()
-                case nil:
-                    RecommendView()
-                }
-            }
-            .navigationDestination(for: String.self) { bvid in
-                VideoDetailView(bvid: bvid)
-            }
-            .navigationDestination(for: UpRoute.self) { route in
-                UpProfileView(mid: route.mid)
-            }
-            .navigationDestination(for: PartitionRoute.self) { route in
-                PartitionVideosView(zone: BiliZone(id: route.tid, name: route.name, icon: "play.rectangle"))
-            }
-            .navigationDestination(for: SearchRoute.self) { route in
-                SearchView(query: route.query)
-            }
-            .navigationDestination(for: DynamicRoute.self) { route in
-                DynamicDetailView(id: route.id)
-            }
-            .navigationDestination(for: LiveRoute.self) { route in
-                LiveDetailView(route: route)
-            }
+            RootView.rootPage(for: selection, query: submittedQuery)
+                .biliNavDestinations()
         }
     }
+
+    #if os(iOS)
+    /// 每个标签页一份**独立**导航栈。
+    ///
+    /// 千万别让多个标签页共用同一个 `$router.path`：那样推一个视频，
+    /// 等于在每个已实例化的标签栈里各推一份，每份各建一个 `VideoDetailView` + 播放器，
+    /// 于是「点进视频会同时播放好几个、暂停后后台还有一堆在响」。
+    private func tabStack(_ item: SidebarItem) -> some View {
+        TabNavStack(item: item, query: submittedQuery, isSelected: selection == item)
+    }
+    #endif
 
     #if os(macOS)
     /// 绑定主窗口代理，用于“关闭窗口”行为（完全退出 / 菜单栏模式 / 询问）。
@@ -268,3 +237,89 @@ public struct RootView: View {
             .clipShape(Circle())
     }
 }
+
+// MARK: - 导航栈共用件
+
+extension RootView {
+    /// 详情区的根页面。macOS 的单一导航栈与 iOS 的每个标签栈共用这一份。
+    @ViewBuilder
+    static func rootPage(for item: SidebarItem?, query: String) -> some View {
+        switch item {
+        case .home:
+            RecommendView()
+        case .zones:
+            ZonesView()
+        case .popular:
+            PopularView()
+        case .live:
+            LiveFeedView()
+        case .search:
+            SearchView(query: query)
+        case .dynamics:
+            DynamicFeedView()
+        case .favorites:
+            FavoritesView()
+        case .history:
+            HistoryView()
+        case .watchLater:
+            WatchLaterView()
+        case .settings:
+            SettingsView()
+        case nil:
+            RecommendView()
+        }
+    }
+}
+
+extension View {
+    /// 全部导航目的地。两端、以及 iOS 的每个标签栈都挂同一套路由。
+    func biliNavDestinations() -> some View {
+        self
+            .navigationDestination(for: String.self) { bvid in
+                VideoDetailView(bvid: bvid)
+            }
+            .navigationDestination(for: UpRoute.self) { route in
+                UpProfileView(mid: route.mid)
+            }
+            .navigationDestination(for: PartitionRoute.self) { route in
+                PartitionVideosView(zone: BiliZone(id: route.tid, name: route.name, icon: "play.rectangle"))
+            }
+            .navigationDestination(for: SearchRoute.self) { route in
+                SearchView(query: route.query)
+            }
+            .navigationDestination(for: DynamicRoute.self) { route in
+                DynamicDetailView(id: route.id)
+            }
+            .navigationDestination(for: LiveRoute.self) { route in
+                LiveDetailView(route: route)
+            }
+    }
+}
+
+#if os(iOS)
+/// 单个标签页自己的导航栈。动机见 `RootView.tabStack(_:)` 的说明。
+private struct TabNavStack: View {
+    let item: RootView.SidebarItem
+    let query: String
+    let isSelected: Bool
+    @EnvironmentObject private var router: AppRouter
+    @State private var path = NavigationPath()
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            RootView.rootPage(for: item, query: query)
+                .biliNavDestinations()
+        }
+        // 外部程序化导航（搜索、评论里点视频、菜单栏卡片…）落进**当前**标签的栈。
+        .onChange(of: router.path) { _, incoming in
+            guard isSelected, incoming != path else { return }
+            path = incoming
+        }
+        // 本栈变化时回写，让 `router.path` 始终等于当前可见标签的路径。
+        .onChange(of: path) { _, outgoing in
+            guard isSelected, outgoing != router.path else { return }
+            router.path = outgoing
+        }
+    }
+}
+#endif

@@ -51,7 +51,7 @@ struct UpProfileView: View {
         }
         .navigationTitle(card?.name ?? "UP主页")
         .autoLoadMore { await loadMore() }
-        .refreshable { await load() }
+        .feedRefreshable { await load() }
         .sheet(isPresented: $showLogin) {
             LoginView()
         }

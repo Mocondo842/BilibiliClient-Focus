@@ -66,7 +66,7 @@ struct PopularView: View {
         }
         .navigationTitle("热门")
         .autoLoadMore { await loadMore() }
-        .refreshable { await load() }
+        .feedRefreshable { await load() }
         .overlay {
             if isLoading && videos.isEmpty {
                 ProgressView("加载中…")

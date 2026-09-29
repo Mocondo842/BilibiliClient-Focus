@@ -64,7 +64,7 @@ struct RecommendView: View {
         }
         .navigationTitle("推荐")
         .autoLoadMore { await loadMore() }
-        .refreshable { await load() }
+        .feedRefreshable { await load() }
         .toolbar {
             ToolbarItem {
                 Button {

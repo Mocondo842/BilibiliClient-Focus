@@ -160,7 +160,7 @@ struct SearchView: View {
                 .frame(maxWidth: .infinity)
                 .padding(20)
             }
-            .refreshable {
+            .feedRefreshable {
                 await search(reset: true)
             }
             .autoLoadMore {

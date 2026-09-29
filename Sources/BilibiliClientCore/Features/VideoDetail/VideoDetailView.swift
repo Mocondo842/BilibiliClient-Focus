@@ -8,6 +8,9 @@ struct VideoDetailView: View {
 
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var router: AppRouter
+    /// 宽度类：用来区分 iPad（regular）与 iPhone / 窄 iPad（compact）。
+    /// 只在 iOS 的两栏布局里读；macOS 不参与，行为不变。
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @StateObject private var player = PlayerController()
     @State private var danmaku = DanmakuEngine()
     /// 按需创建的播放窗口：默认不存在，画面就播在页面里
@@ -117,6 +120,13 @@ struct VideoDetailView: View {
         .onDisappear {
             PlaybackMenuState.shared.unbind()
             closePlaybackWindow()
+            // iOS 的系统全屏（`AVPlayerViewController` 自带）会把整页盖住，SwiftUI 因此
+            // 也会发 `onDisappear` —— 可用户并没有离开播放页。按"离开"处理就会：一点
+            // 全屏就暂停、弹幕立刻消失，而且播放器一被拆掉，系统在退出时就失去了可以
+            // 平滑缩回去的落点，原生退出动画只能退化成下滑渐隐。
+            // 全屏中与否由 AVKit 的 delegate 回调给出（见 `IOSPlayerSurface`）；
+            // macOS 没有这个形态，恒为 false，行为与改动前完全一致。
+            guard !PlayerPresentationState.shared.isSystemFullscreen else { return }
             player.stop()
             danmaku.reset()
         }
@@ -189,7 +199,34 @@ struct VideoDetailView: View {
         isLoading = false
     }
 
+    /// iPad 两栏布局的最小宽度。低于它就说明是「竖屏窄 iPad、分屏、Stage Manager 小窗」——
+    /// 硬拆两栏会两边都挤，不如回到单栏。
+    private static let twoColumnMinWidth: CGFloat = 820
+
+    /// 播放页主体。
+    ///
+    /// - iPad（规则宽度 + 屏幕够宽）：两栏 —— 左「画面 + 视频信息」、右「评论」，
+    ///   两块各自独立滚动，一屏同时能看到简介与评论。
+    /// - 其余（macOS / iPhone / 窄 iPad）：原来那一栏纵向排布，画面固定在顶部。
+    @ViewBuilder
     private func content(_ view: VideoDetailData.VideoView) -> some View {
+        #if os(iOS)
+        // 用 `GeometryReader` 而不是先量后布局：宽度在首帧就已经拿到，
+        // 不会先按单栏画一帧再跳成两栏。
+        GeometryReader { proxy in
+            if horizontalSizeClass == .regular, proxy.size.width >= Self.twoColumnMinWidth {
+                wideContent(view, width: proxy.size.width)
+            } else {
+                stackedContent(view)
+            }
+        }
+        #else
+        stackedContent(view)
+        #endif
+    }
+
+    /// 单栏：macOS 与 iPhone / 窄 iPad 共用。画面固定在页面顶部，下方内容整体滚动。
+    private func stackedContent(_ view: VideoDetailData.VideoView) -> some View {
         VStack(spacing: 0) {
             // 视频固定在页面顶部：滚动时保持原位完整可见，下方内容独立滑动
             playerSection
@@ -198,41 +235,13 @@ struct VideoDetailView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 24)
 
-                // 固定空隙：不属于滚动内容，滚动时始终保留在视频与内容之间
-                Color.clear
-                    .frame(height: 18)
+            // 固定空隙：不属于滚动内容，滚动时始终保留在视频与内容之间
+            Color.clear
+                .frame(height: 18)
 
-                ScrollView {
+            ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    playbackToolbar
-
-                    Text(view.title)
-                        .font(.title2.bold())
-                        .textSelection(.enabled)
-
-                    infoRow(view)
-
-                    actionBar(view)
-
-                    if let pages = view.pages, pages.count > 1 {
-                        partSelector(pages)
-                    }
-
-                    Divider()
-
-                    Text("简介").font(.headline)
-                    RichText(text: view.desc.isEmpty ? "该视频没有简介" : view.desc,
-                             font: .callout, lineSpacing: 4)
-                        .foregroundStyle(.secondary)
-
-                    if !tags.isEmpty {
-                        FlowLayout(spacing: 8) {
-                            ForEach(tags) { tag in
-                                tagButton(tag)
-                            }
-                        }
-                        .padding(.top, 14)
-                    }
+                    videoInfoSection(view)
 
                     Divider()
 
@@ -248,6 +257,96 @@ struct VideoDetailView: View {
             }
         }
     }
+
+    /// 视频信息：工具行、标题、UP 主与数据、操作栏、分P、简介、TAG。
+    /// 单栏与 iPad 两栏共用同一份，保证两种布局里信息一致。
+    @ViewBuilder
+    private func videoInfoSection(_ view: VideoDetailData.VideoView) -> some View {
+        playbackToolbar
+
+        Text(view.title)
+            .font(.title2.bold())
+            .textSelection(.enabled)
+
+        infoRow(view)
+
+        actionBar(view)
+
+        if let pages = view.pages, pages.count > 1 {
+            partSelector(pages)
+        }
+
+        Divider()
+
+        Text("简介").font(.headline)
+        RichText(text: view.desc.isEmpty ? "该视频没有简介" : view.desc,
+                 font: .callout, lineSpacing: 4)
+            .foregroundStyle(.secondary)
+
+        if !tags.isEmpty {
+            FlowLayout(spacing: 8) {
+                ForEach(tags) { tag in
+                    tagButton(tag)
+                }
+            }
+            .padding(.top, 14)
+        }
+    }
+
+    #if os(iOS)
+    /// iPad 宽屏两栏：左「画面 + 视频信息」，右「评论」，各自独立滚动。
+    private func wideContent(_ view: VideoDetailData.VideoView, width: CGFloat) -> some View {
+        // 评论栏给固定宽度（随页面宽微调，但有上下限），剩下的全给画面与视频信息
+        let commentWidth = min(max(width * 0.38, 320), 460)
+        return HStack(alignment: .top, spacing: 0) {
+            // 左栏：画面照旧固定在顶部，下面的视频信息自己滚动
+            VStack(spacing: 0) {
+                playerSection
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+
+                Color.clear
+                    .frame(height: 16)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        videoInfoSection(view)
+                        Spacer(minLength: 24)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 24)
+                }
+            }
+            .frame(maxWidth: .infinity)
+
+            Divider()
+
+            commentColumn(view)
+                .frame(width: commentWidth)
+        }
+    }
+
+    /// 右栏：评论区独立一列。标题固定，评论自己滚动，与左栏互不影响。
+    private func commentColumn(_ view: VideoDetailData.VideoView) -> some View {
+        VStack(spacing: 0) {
+            commentHeader
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 12)
+
+            Divider()
+
+            ScrollView {
+                commentSection(view)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+            }
+        }
+        .background(Color.cardSolidBackground)
+    }
+    #endif
 
     // MARK: - 分P选集
 

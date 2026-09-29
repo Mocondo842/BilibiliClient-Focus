@@ -115,7 +115,7 @@ struct FavoritesView: View {
             .frame(maxWidth: .infinity)
             .padding(20)
         }
-        .refreshable { await load() }
+        .feedRefreshable { await load() }
         .autoLoadMore { await loadMore() }
     }
 

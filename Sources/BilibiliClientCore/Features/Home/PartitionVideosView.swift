@@ -65,7 +65,7 @@ struct PartitionVideosView: View {
             .padding(20)
         }
         .navigationTitle("\(zone.name) 排行榜")
-        .refreshable { await load() }
+        .feedRefreshable { await load() }
         .task { await load() }
     }
 
