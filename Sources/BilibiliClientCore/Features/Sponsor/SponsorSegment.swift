@@ -201,6 +201,31 @@ struct SponsorNotice: Identifiable, Equatable, Sendable {
         }
     }
 
+    /// 卡片标题。
+    var title: String {
+        switch kind {
+        case .skipped: "已跳过赞助片段"
+        case .muted: "已静音赞助片段"
+        case .undone: "已回退"
+        }
+    }
+
+    /// 卡片副标题：说清楚跳的是哪一类、多长，以及回退会发生什么。
+    var subtitle: String {
+        let category = segment.category.displayName
+        let seconds = "\(Int(segment.duration.rounded())) 秒"
+        switch kind {
+        case .skipped: return "\(category) · \(seconds)"
+        case .muted: return "\(category) · \(seconds)（已静音通过）"
+        case .undone: return "\(category) · 本场播放不再自动跳过"
+        }
+    }
+
+    /// 卡片右侧的动作说明。
+    var actionHint: String? {
+        isUndoable ? "回到这段开头，正常看完" : nil
+    }
+
     /// 面向界面的图标。
     var symbolName: String {
         switch kind {

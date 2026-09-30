@@ -450,6 +450,8 @@ final class PlayerController: ObservableObject {
                         toleranceBefore: .zero,
                         toleranceAfter: .zero)
             SystemMediaCenter.shared.syncNowPlaying(force: true)
+            // 用 info 级别：release 里 .debug 不落盘，跳过事件需要能在 Console 里查到
+            AppLog.player.info("空降助手：跳过 \(segment.category.rawValue)(\(Int(segment.start))s→\(Int(segment.end))s) bvid=\(self.bvid)")
             showSponsorNotice(SponsorNotice(kind: .skipped(segment)))
 
         case .mute(let segment):
@@ -487,6 +489,13 @@ final class PlayerController: ObservableObject {
 
         AppLog.player.debug("空降助手：用户回退，位置 \(Int(segment.start))s，本场不再拦截该片段")
         showSponsorNotice(SponsorNotice(kind: .undone(segment)), duration: 2)
+    }
+
+    /// 关掉提示卡片（不改变播放位置）。
+    func dismissSponsorNotice() {
+        sponsorNoticeTask?.cancel()
+        sponsorNoticeTask = nil
+        sponsorNotice = nil
     }
 
     /// 显示一条空降提示。默认可回退的那种停留久一点，留出点击时间。

@@ -22,7 +22,11 @@ struct LivePlayerSurface: View {
                 IOSPlayerSurface(player: player,
                                  engine: nil,
                                  danmakuEnabled: false,
-                                 danmakuSettings: .current)
+                                 danmakuSettings: .current,
+                                 // 直播没有「空降」概念，不挂提示卡片
+                                 sponsorNotice: nil,
+                                 onSponsorUndo: {},
+                                 onSponsorDismiss: {})
                     .id(player)
                 #endif
             } else if model.state == .loading {

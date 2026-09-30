@@ -34,22 +34,16 @@ struct VideoPlayerSurface: View {
                 IOSPlayerSurface(player: player,
                                  engine: engine,
                                  danmakuEnabled: danmakuEnabled,
-                                 danmakuSettings: danmakuSettings)
+                                 danmakuSettings: danmakuSettings,
+                                 sponsorNotice: playerController.sponsorNotice,
+                                 onSponsorUndo: { playerController.undoSponsorAction() },
+                                 onSponsorDismiss: { playerController.dismissSponsorNotice() })
                     .id(player)
                 #endif
             }
-            // 空降助手轻提示：两个平台都在画面右上角浮一下；
-            // 可点「回退」把这段广告放回来，并让本场不再自动跳过它
-            if let notice = playerController.sponsorNotice {
-                SponsorNoticeBadge(notice: notice) {
-                    playerController.undoSponsorAction()
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .transition(.opacity)
-            }
+            // 空降提示卡片不在这里画：它必须挂在播放器自己的覆盖层里，
+            // 否则会被 AVPlayerView 盖住、也进不了全屏（见 SponsorNoticeHostView）。
         }
-        .animation(.easeInOut(duration: 0.2), value: playerController.sponsorNotice)
         .clipped()
     }
 
@@ -63,6 +57,9 @@ struct VideoPlayerSurface: View {
         config.qualities = playerController.qualities
         config.currentQualityId = playerController.currentQualityId
         config.sponsorMarkers = playerController.sponsorMarkers
+        config.sponsorNotice = playerController.sponsorNotice
+        config.onSponsorUndo = { playerController.undoSponsorAction() }
+        config.onSponsorDismiss = { playerController.dismissSponsorNotice() }
         config.onTogglePlay = { playerController.togglePlay() }
         config.onSeek = { playerController.seek(to: $0) }
         config.onSkip = { playerController.skip(by: $0) }

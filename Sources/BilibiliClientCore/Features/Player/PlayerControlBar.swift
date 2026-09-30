@@ -22,6 +22,10 @@ struct PlayerBarConfig {
     var currentQualityId: Int?
     /// 空降助手在进度条上要画的片段标记（空 = 不画）
     var sponsorMarkers: [SponsorMarker] = []
+    /// 空降提示卡片；nil = 不显示
+    var sponsorNotice: SponsorNotice?
+    var onSponsorUndo: @MainActor () -> Void = {}
+    var onSponsorDismiss: @MainActor () -> Void = {}
     var onTogglePlay: @MainActor () -> Void = {}
     var onSeek: @MainActor (Double) -> Void = { _ in }
     var onSkip: @MainActor (Double) -> Void = { _ in }
@@ -47,6 +51,8 @@ final class PlayerBarModel: ObservableObject {
     @Published private(set) var currentQualityId: Int?
     /// 空降助手标记：跟着宿主推入的配置更新，不在节拍里重算。
     @Published private(set) var sponsorMarkers: [SponsorMarker] = []
+    /// 空降提示卡片：同样由宿主推入。
+    @Published private(set) var sponsorNotice: SponsorNotice?
     /// 画中画入口是否可用（AVKit 未提供该入口时隐藏按钮）
     @Published var supportsPictureInPicture = false
 
@@ -116,7 +122,14 @@ final class PlayerBarModel: ObservableObject {
         if sponsorMarkers != config.sponsorMarkers {
             sponsorMarkers = config.sponsorMarkers
         }
+        if sponsorNotice != config.sponsorNotice {
+            sponsorNotice = config.sponsorNotice
+        }
     }
+
+    /// 空降卡片上的动作（由宿主接线到 PlayerController）
+    var onSponsorUndo: @MainActor () -> Void = {}
+    var onSponsorDismiss: @MainActor () -> Void = {}
 
     func setFullscreen(_ fullscreen: Bool) {
         isFullscreen = fullscreen

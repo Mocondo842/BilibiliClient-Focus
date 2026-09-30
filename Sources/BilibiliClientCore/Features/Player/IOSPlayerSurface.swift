@@ -19,6 +19,10 @@ struct IOSPlayerSurface: UIViewControllerRepresentable {
     let danmakuEnabled: Bool
     /// 弹幕外观/行为设置（不透明度、字号、显示区域、显示类型…）
     let danmakuSettings: DanmakuSettings
+    /// 空降提示卡片；nil = 不显示
+    let sponsorNotice: SponsorNotice?
+    let onSponsorUndo: () -> Void
+    let onSponsorDismiss: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -45,7 +49,29 @@ struct IOSPlayerSurface: UIViewControllerRepresentable {
             overlay.addSubview(danmaku)
             context.coordinator.danmaku = danmaku
         }
+
+        // 空降提示卡片也挂在 contentOverlayView 上：只有这样它才会跟着播放器
+        // 一起进系统全屏（页面里的 SwiftUI 浮层在系统全屏时会被留在原地）。
+        // 宿主视图按内容自适应尺寸并钉在右上角，因此卡片之外的区域不受影响。
+        if let overlay = controller.contentOverlayView {
+            let host = UIHostingController(rootView: AnyView(Self.emptyNotice))
+            host.view.backgroundColor = .clear
+            host.view.translatesAutoresizingMaskIntoConstraints = false
+            controller.addChild(host)
+            overlay.addSubview(host.view)
+            NSLayoutConstraint.activate([
+                host.view.trailingAnchor.constraint(equalTo: overlay.trailingAnchor, constant: -14),
+                host.view.topAnchor.constraint(equalTo: overlay.topAnchor, constant: 14),
+            ])
+            host.didMove(toParent: controller)
+            context.coordinator.noticeHost = host
+        }
         return controller
+    }
+
+    /// 没有提示时用一个零尺寸视图，宿主就不会挡住任何点击。
+    private static var emptyNotice: some View {
+        Color.clear.frame(width: 0, height: 0)
     }
 
     func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
@@ -58,16 +84,33 @@ struct IOSPlayerSurface: UIViewControllerRepresentable {
         }
         danmaku.enabled = danmakuEnabled
         danmaku.apply(settings: danmakuSettings)
+
+        if let host = context.coordinator.noticeHost {
+            if let sponsorNotice {
+                host.rootView = AnyView(
+                    SponsorNoticeCard(notice: sponsorNotice,
+                                      onUndo: onSponsorUndo,
+                                      onDismiss: onSponsorDismiss)
+                )
+            } else {
+                host.rootView = AnyView(Self.emptyNotice)
+            }
+        }
     }
 
     static func dismantleUIViewController(_ controller: AVPlayerViewController,
                                           coordinator: Coordinator) {
         coordinator.danmaku?.removeFromSuperview()
         coordinator.danmaku = nil
+        coordinator.noticeHost?.willMove(toParent: nil)
+        coordinator.noticeHost?.view.removeFromSuperview()
+        coordinator.noticeHost?.removeFromParent()
+        coordinator.noticeHost = nil
     }
 
     final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
         var danmaku: DanmakuOverlayView?
+        var noticeHost: UIHostingController<AnyView>?
 
         /// 播放器最近一次**进入暂停**的时刻：系统暂停可能发生在 `willEnd` 回调之前的
         /// 几帧里，光看回调那一刻的状态会漏（见 `wasPlayingBeforeExit`）

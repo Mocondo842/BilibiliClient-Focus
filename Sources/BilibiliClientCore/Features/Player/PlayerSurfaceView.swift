@@ -76,6 +76,8 @@ final class DanmakuPlayerView: AVPlayerView {
     /// 自绘控制栏的状态中枢（含承载层），与弹幕层同挂在 contentOverlayView 上
     let controlsModel = PlayerBarModel()
     private var controlsHost: PlayerControlsHostView?
+    /// 空降提示卡片的承载层（同样挂在 contentOverlayView 上，全屏才会跟着走）
+    private var sponsorNoticeHost: SponsorNoticeHostView?
 
     /// SwiftUIX 的事件监听：start/stop 生命周自带，不用自己 add/remove 本地监视器
     private var keyMonitor: NSEventMonitor?
@@ -137,8 +139,11 @@ final class DanmakuPlayerView: AVPlayerView {
     /// SwiftUI 每轮更新推入的控制栏配置（状态与动作）；页面快捷键与控制栏共用同一入口
     func updateControls(_ config: PlayerBarConfig) {
         controlsModel.apply(config)
+        controlsModel.onSponsorUndo = config.onSponsorUndo
+        controlsModel.onSponsorDismiss = config.onSponsorDismiss
         onSpace = { [weak self] in self?.controlsModel.togglePlay() }
         onSkip = { [weak self] in self?.controlsModel.skip(by: $0) }
+        sponsorNoticeHost?.sync()
     }
 
     /// 把弹幕层与自绘控制栏挂到 `contentOverlayView`（幂等；未就绪时由 layout 再试）。
@@ -171,12 +176,27 @@ final class DanmakuPlayerView: AVPlayerView {
             ])
             controlsHost = host
         }
+        // 空降卡片后挂，落在控制栏之上；除卡片本身外不拦截点击
+        if sponsorNoticeHost == nil {
+            let host = SponsorNoticeHostView(model: controlsModel)
+            host.translatesAutoresizingMaskIntoConstraints = false
+            overlay.addSubview(host)
+            NSLayoutConstraint.activate([
+                host.leadingAnchor.constraint(equalTo: overlay.leadingAnchor),
+                host.trailingAnchor.constraint(equalTo: overlay.trailingAnchor),
+                host.topAnchor.constraint(equalTo: overlay.topAnchor),
+                host.bottomAnchor.constraint(equalTo: overlay.bottomAnchor),
+            ])
+            sponsorNoticeHost = host
+            host.sync()
+        }
     }
 
     override func layout() {
         super.layout()
         // 布局过程中不能改视图树（会触发 layoutSubtreeIfNeeded 递归告警），延后一拍再挂
-        guard (danmakuView == nil && danmakuEngine != nil) || controlsHost == nil, !attachScheduled else { return }
+        guard (danmakuView == nil && danmakuEngine != nil) || controlsHost == nil || sponsorNoticeHost == nil,
+              !attachScheduled else { return }
         attachScheduled = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
