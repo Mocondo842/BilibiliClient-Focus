@@ -29,11 +29,25 @@
 
 ## 安装
 
-从 [Releases](https://github.com/Mora-han/BilibiliClient/releases) 下载 `BilibiliClient-v1.2.3.app.zip`，解压后将 App 移动到“应用程序”文件夹。
+### macOS
+
+从 [Releases](https://github.com/Mora-han/BilibiliClient/releases) 下载 `BilibiliClient-<版本>.zip`，解压后将 App 移动到“应用程序”文件夹。
+
+已经在用旧版本的话不用手动下载：App 内置 Sparkle 自动更新，设置页里也有「检查更新」入口。
 
 首次使用需要自行扫码登录。登录信息仅保存在当前 Mac 的本地钥匙串中，不会随安装包分享。
 
-### **如果提示被系统拦截，打开系统设置，隐私与安全性，找到”安全性"，找到 BilibiliClient，点 "仍要打开"**
+### iPhone / iPad
+
+从同一个 Releases 页面下载 `BilibiliClient-<版本>-unsigned.ipa`。
+
+- 要求 **iOS / iPadOS 26.0** 及以上，同时支持 iPhone 与 iPad
+- 这是**未签名包**，系统不会直接安装，需要用自签工具（[AltStore](https://altstore.io)、[Sideloadly](https://sideloadly.io)、TrollStore 或 Xcode）以你自己的 Apple ID 重签名后再装
+- 免费 Apple ID 的签名 7 天后过期，到期重新签一次即可，数据不会丢
+- iOS 版**没有应用内自动更新**（不支持 Sparkle），升级要重新下载 IPA 覆盖安装
+- 功能与 macOS 版一致，播放器、导航等平台差异见下方「平台差异」
+
+### **如果提示被系统拦截，打开系统设置，隐私与安全性，找到“安全性”，找到 BilibiliClient，点 “仍要打开”**
 
 ## 从源码运行
 
