@@ -36,8 +36,13 @@ while [ $# -gt 0 ]; do
 done
 
 case "$SDK_KIND" in
-  iphoneos)        TRIPLE="arm64-apple-ios27.0";            SDK_NAME="iphoneos" ;;
-  iphonesimulator) TRIPLE="arm64-apple-ios27.0-simulator";  SDK_NAME="iphonesimulator" ;;
+  # 这里的版本必须与 Package.swift 的 `.iOS(.v26)` 以及下面 Info.plist 里的
+  # MinimumOSVersion 保持一致。曾经写死成 ios27.0，导致 Mach-O 的 minos 变成
+  # 27.0：包在 iOS 26 上装得上（plist 写着 26.0）却一启动就崩，报 SwiftUI 符号缺失。
+  # 用新版 Xcode SDK 编译时，部署目标决定编译器走不走向后兼容路径，所以这行
+  # 不该跟着 SDK 版本水涨船高。改成 26.0 后实测可在 iOS 26.5 模拟器正常运行。
+  iphoneos)        TRIPLE="arm64-apple-ios26.0";            SDK_NAME="iphoneos" ;;
+  iphonesimulator) TRIPLE="arm64-apple-ios26.0-simulator";  SDK_NAME="iphonesimulator" ;;
 esac
 
 # 生成构建信息（版本号单点来源：version.txt，与 macOS 侧共用同一份）
