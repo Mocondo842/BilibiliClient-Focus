@@ -1,12 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Bilibili Client 自动更新源（Sparkle）。
-     空 feed：表示目前没有可用更新。发布新版本时用
-       ./scripts/release.sh <version> --publish
-     重新生成这个文件（含 EdDSA 签名）并提交。 -->
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
-        <title>Bilibili Client</title>
-        <description>Bilibili Client 更新源</description>
-        <language>zh-CN</language>
+        <title>BilibiliClient</title>
+        <item>
+            <title>1.8.2</title>
+            <pubDate>Wed, 30 Sep 2026 20:56:07 +0800</pubDate>
+            <sparkle:version>146</sparkle:version>
+            <sparkle:shortVersionString>1.8.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/Mora-han/BilibiliClient/releases/download/v1.8.2/BilibiliClient-1.8.2.zip" length="5543147" type="application/octet-stream" sparkle:edSignature="7QfAsPNOCzn2qX3jm/5chnO7WLjk8bpD7BtUpqH5a6g4SxLATqOEPI3IYgWQG9XJCXTpU1SHtbEBzLelmgUSBw=="/>
+        </item>
     </channel>
 </rss>
