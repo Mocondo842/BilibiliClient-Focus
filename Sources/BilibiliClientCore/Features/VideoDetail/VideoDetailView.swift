@@ -360,6 +360,17 @@ struct VideoDetailView: View {
         return view.cid
     }
 
+    /// 下载入口用的请求描述：跟着当前选中的分P 走。
+    private func downloadRequest(for view: VideoDetailData.VideoView) -> DownloadRequest {
+        let cid = activePageCid
+        let page = view.pages?.first { $0.cid == cid }
+        return DownloadRequest(bvid: view.bvid,
+                               cid: cid,
+                               title: view.title,
+                               pageTitle: page?.part,
+                               pageIndex: page?.page)
+    }
+
     /// 分P选集：标题行 + 可横向滑动的分P卡片列表（点击切换播放）。
     private func partSelector(_ pages: [VideoDetailData.VideoPage]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -618,7 +629,9 @@ struct VideoDetailView: View {
     // MARK: - 点赞 / 投币 / 收藏 / 分享
 
     private func actionBar(_ view: VideoDetailData.VideoView) -> some View {
-        HStack(spacing: 28) {
+        // 动作栏又加了一项（下载），iPhone 的宽度放不下原来的 28pt 间距，
+        // 紧凑宽度下收窄；macOS 的 horizontalSizeClass 是 nil，间距维持原样。
+        HStack(spacing: horizontalSizeClass == .compact ? 14 : 28) {
             VStack(spacing: 3) {
                 Image(systemName: liked ? "hand.thumbsup.fill" : "hand.thumbsup")
                 Text(Formatters.count(likeCount))
@@ -711,6 +724,9 @@ struct VideoDetailView: View {
                     Text("稍后再看").font(.caption2)
                 }.foregroundStyle(watchLaterAdded ? .pink : .primary)
             }.buttonStyle(.plain).hoverScale(scale: 1.06)
+
+            // 下载入口：跟随当前选中的分P
+            DownloadActionItem(request: downloadRequest(for: view))
 
             Spacer()
         }
@@ -1172,7 +1188,8 @@ struct VideoDetailView: View {
 }
 
 /// 悬浮小卡片中的一行操作，带系统菜单同款悬停高亮。
-private struct MenuActionRow: View {
+/// 下载卡片复用同一种行样式，所以这里是 internal 而不是 private。
+struct MenuActionRow: View {
     let icon: String
     let title: String
     let action: () -> Void
