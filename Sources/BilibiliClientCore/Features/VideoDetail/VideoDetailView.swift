@@ -596,35 +596,96 @@ struct VideoDetailView: View {
     }
 
     private func infoRow(_ view: VideoDetailData.VideoView) -> some View {
-        HStack(spacing: 14) {
-            NavigationLink(value: UpRoute(mid: view.owner.mid)) {
-                HStack(spacing: 8) {
-                    RemoteImage(url: Formatters.https(view.owner.face ?? ""), variant: .avatar)
-                        .frame(width: 30, height: 30)
-                        .clipShape(Circle())
-                    Text(view.owner.name)
-                        .font(.callout.weight(.medium))
+        // iPhone 的宽度放不下「UP主 + 关注 + 发布时间 + 三项统计」，
+        // 紧凑宽度下拆成两行：上排 UP主 与关注，下排发布时间与统计。
+        // macOS 的 horizontalSizeClass 是 nil，布局与改造前一致。
+        Group {
+            if horizontalSizeClass == .compact {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        ownerSection(view)
+                        Spacer(minLength: 0)
+                    }
+                    HStack(spacing: 14) {
+                        publishTimeTag(view.pubdate)
+                        statsSection(view)
+                        Spacer(minLength: 0)
+                    }
+                }
+            } else {
+                HStack(spacing: 14) {
+                    ownerSection(view)
+                    Spacer()
+                    publishTimeTag(view.pubdate)
+                    statsSection(view)
                 }
             }
-            .buttonStyle(.plain)
-            .simultaneousGesture(TapGesture().onEnded {
-                player.stop()
-                danmaku.reset()
-            })
-            if !session.loggedIn || !relationLoaded {
-                EmptyView()
-            } else if isFollowing {
-                Text("已关注").font(.caption.weight(.medium)).foregroundStyle(.secondary)
-            } else {
-                Button("+关注") { Task { await follow(mid: view.owner.mid) } }
-                    .buttonStyle(.borderedProminent).tint(.pink).controlSize(.small)
-            }
-            Spacer()
-            stat(view.stat.view, "play.fill")
-            stat(view.stat.danmaku, "text.bubble.fill")
-            stat(view.stat.like, "hand.thumbsup.fill")
         }
     }
+
+    /// UP 主头像 + 昵称 + 关注按钮
+    @ViewBuilder
+    private func ownerSection(_ view: VideoDetailData.VideoView) -> some View {
+        NavigationLink(value: UpRoute(mid: view.owner.mid)) {
+            HStack(spacing: 8) {
+                RemoteImage(url: Formatters.https(view.owner.face ?? ""), variant: .avatar)
+                    .frame(width: 30, height: 30)
+                    .clipShape(Circle())
+                Text(view.owner.name)
+                    .font(.callout.weight(.medium))
+            }
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(TapGesture().onEnded {
+            player.stop()
+            danmaku.reset()
+        })
+        if !session.loggedIn || !relationLoaded {
+            EmptyView()
+        } else if isFollowing {
+            Text("已关注").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+        } else {
+            Button("+关注") { Task { await follow(mid: view.owner.mid) } }
+                .buttonStyle(.borderedProminent).tint(.pink).controlSize(.small)
+        }
+    }
+
+    /// 播放量 / 弹幕数 / 点赞数
+    @ViewBuilder
+    private func statsSection(_ view: VideoDetailData.VideoView) -> some View {
+        stat(view.stat.view, "play.fill")
+        stat(view.stat.danmaku, "text.bubble.fill")
+        stat(view.stat.like, "hand.thumbsup.fill")
+    }
+
+    /// 发布时间标签：与播放量等并排，悬停（iOS 长按）可看完整日期。
+    ///
+    /// 相对时间用现成的 `Formatters.timeAgo`：一个月内是「N 天前」，
+    /// 更早自动退回 `yyyy-MM-dd`，这正好是 B 站自己那套显示规则。
+    @ViewBuilder
+    private func publishTimeTag(_ timestamp: Int) -> some View {
+        if timestamp > 0 {
+            HStack(spacing: 4) {
+                Image(systemName: "calendar")
+                Text(Formatters.timeAgo(timestamp))
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background {
+                Capsule().fill(Color.primary.opacity(0.07))
+            }
+            .help("发布于 \(Self.absoluteDateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(timestamp))))")
+        }
+    }
+
+    /// 标签悬停提示里的完整时间。
+    private static let absoluteDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter
+    }()
 
     // MARK: - 点赞 / 投币 / 收藏 / 分享
 
