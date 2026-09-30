@@ -42,6 +42,23 @@ final class PlayerController: ObservableObject {
     private var rateBeforeHold: Float = 1
     private var wasPlayingBeforeHold = false
 
+    // MARK: 空降助手
+
+    /// 进度条上要画的空降片段标记（切视频 / 切分P / 改设置时更新一次）。
+    @Published private(set) var sponsorMarkers: [SponsorMarker] = []
+    /// 刚刚发生的一次自动跳过，用于画面的轻提示；几秒后自动清空。
+    @Published private(set) var sponsorNotice: SponsorNotice?
+    /// 判定逻辑（纯值类型，不碰播放器）。
+    private var sponsorEngine = SponsorSkipEngine()
+    private var sponsorObserver: Any?
+    private var sponsorPreferencesObserver: Any?
+    private var sponsorLoadTask: Task<Void, Never>?
+    private var sponsorNoticeTask: Task<Void, Never>?
+    /// 播放器的静音是不是我们按下去的——只有自己按的才由自己恢复。
+    private var sponsorDidMute = false
+    /// 空降判定的节拍间隔（秒），与观察者的 interval 保持一致。
+    private static let sponsorTickInterval: TimeInterval = 0.25
+
     var currentQualityName: String? {
         guard let currentQualityId else { return nil }
         return qualities.first { $0.id == currentQualityId }?.name
@@ -320,6 +337,7 @@ final class PlayerController: ObservableObject {
                 SystemMediaCenter.shared.syncNowPlaying(force: true)
             }
         }
+        startSponsorMonitoring()
     }
 
     private func stopPlaybackMonitoring() {
@@ -331,6 +349,178 @@ final class PlayerController: ObservableObject {
         statusObservation = nil
         durationObservation?.invalidate()
         durationObservation = nil
+        stopSponsorMonitoring()
+    }
+
+    // MARK: - 空降助手
+
+    /// 起一个独立节拍做空降判定。
+    ///
+    /// 与播放监控分开是有意的：播放监控那边只在状态变化时上报，
+    /// 而这里必须每 0.25 秒看一次位置。判定本身只是几次区间比较，
+    /// 且只在真的发生跳过/静音时才写 `@Published`，不会每秒刷新播放页 body。
+    private func startSponsorMonitoring() {
+        stopSponsorMonitoring()
+        registerSponsorPreferencesObserver()
+
+        guard SponsorPreferences.isEnabled else {
+            sponsorEngine.update(segments: [])
+            sponsorMarkers = []
+            return
+        }
+        guard let player, !bvid.isEmpty else { return }
+
+        sponsorObserver = player.addPeriodicTimeObserver(
+            forInterval: CMTime(seconds: Self.sponsorTickInterval, preferredTimescale: 600),
+            queue: .main
+        ) { [weak self] time in
+            MainActor.assumeIsolated {
+                self?.evaluateSponsor(at: time.seconds)
+            }
+        }
+
+        loadSponsorSegments()
+    }
+
+    private func stopSponsorMonitoring() {
+        if let sponsorObserver, let player {
+            player.removeTimeObserver(sponsorObserver)
+        }
+        sponsorObserver = nil
+        if let sponsorPreferencesObserver {
+            NotificationCenter.default.removeObserver(sponsorPreferencesObserver)
+        }
+        sponsorPreferencesObserver = nil
+        sponsorLoadTask?.cancel()
+        sponsorLoadTask = nil
+        sponsorNoticeTask?.cancel()
+        sponsorNoticeTask = nil
+        sponsorNotice = nil
+        sponsorEngine.update(segments: [])
+        sponsorMarkers = []
+        // 只解除自己按下的静音
+        if sponsorDidMute {
+            player?.isMuted = false
+            sponsorDidMute = false
+        }
+    }
+
+    /// 设置页改了空降设置：立刻按新设置重新筛一遍。
+    /// 服务端结果在 `SponsorBlockService` 里有缓存，所以这里通常不发新请求。
+    private func registerSponsorPreferencesObserver() {
+        guard sponsorPreferencesObserver == nil else { return }
+        sponsorPreferencesObserver = NotificationCenter.default.addObserver(
+            forName: .sponsorPreferencesDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.reloadSponsorSegments()
+            }
+        }
+    }
+
+    /// 拉取当前分P 的片段并按设置过滤。失败/为空都不影响播放。
+    private func loadSponsorSegments() {
+        let bvid = self.bvid
+        let cid = self.cid
+        sponsorLoadTask?.cancel()
+        sponsorLoadTask = Task { @MainActor [weak self] in
+            let raw = await SponsorBlockService.shared.segments(for: bvid)
+            guard !Task.isCancelled, let self else { return }
+            let filtered = SponsorPreferences.filter(raw, cid: cid)
+            self.sponsorEngine.update(segments: filtered)
+            self.sponsorMarkers = self.sponsorEngine.markers
+        }
+    }
+
+    /// 一个节拍：判定 → 执行 → 提示。
+    private func evaluateSponsor(at position: Double) {
+        guard let player else { return }
+        guard SponsorPreferences.isEnabled,
+              SponsorPreferences.mode == .automatic,
+              position.isFinite, position >= 0 else { return }
+
+        switch sponsorEngine.tick(position: position, rate: player.rate) {
+        case .none:
+            break
+
+        case .skip(let segment):
+            player.seek(to: CMTime(seconds: segment.end, preferredTimescale: 600),
+                        toleranceBefore: .zero,
+                        toleranceAfter: .zero)
+            SystemMediaCenter.shared.syncNowPlaying(force: true)
+            showSponsorNotice(SponsorNotice(kind: .skipped(segment)))
+
+        case .mute(let segment):
+            guard SponsorPreferences.mutesSegments, !sponsorDidMute else { break }
+            player.isMuted = true
+            sponsorDidMute = true
+            showSponsorNotice(SponsorNotice(kind: .muted(segment)))
+
+        case .unmute:
+            guard sponsorDidMute else { break }
+            player.isMuted = false
+            sponsorDidMute = false
+        }
+    }
+
+    /// 用户点了画面上的「回退」：把播放位置拉回被跳过片段的开头，
+    /// 并让这一段在本场播放里不再被自动拦截（广告会正常播完）。
+    func undoSponsorAction() {
+        guard let notice = sponsorNotice, notice.isUndoable, let player else { return }
+        let segment = notice.segment
+
+        // 拉黑这段：之后无论怎么播、怎么拖，都不会再自动跳/静音它
+        sponsorEngine.ignore(segment)
+
+        // 静音类的话先把声音还回来
+        if sponsorDidMute {
+            player.isMuted = false
+            sponsorDidMute = false
+        }
+
+        player.seek(to: CMTime(seconds: segment.start, preferredTimescale: 600),
+                    toleranceBefore: .zero,
+                    toleranceAfter: .zero)
+        SystemMediaCenter.shared.syncNowPlaying(force: true)
+
+        AppLog.player.debug("空降助手：用户回退，位置 \(Int(segment.start))s，本场不再拦截该片段")
+        showSponsorNotice(SponsorNotice(kind: .undone(segment)), duration: 2)
+    }
+
+    /// 显示一条空降提示。默认可回退的那种停留久一点，留出点击时间。
+    private func showSponsorNotice(_ notice: SponsorNotice, duration: TimeInterval = 8) {
+        sponsorNotice = notice
+        sponsorNoticeTask?.cancel()
+        sponsorNoticeTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(duration))
+            guard !Task.isCancelled else { return }
+            self?.sponsorNotice = nil
+        }
+    }
+
+    /// 设置变了：重拉一次（分类白名单可能变了，缓存里的原始数据按新设置重新筛）。
+    func reloadSponsorSegments() {
+        guard let player, !bvid.isEmpty else { return }
+
+        guard SponsorPreferences.isEnabled else {
+            // 关掉：清标记，并解除自己按下的静音
+            if sponsorDidMute {
+                player.isMuted = false
+                sponsorDidMute = false
+            }
+            sponsorEngine.update(segments: [])
+            sponsorMarkers = []
+            return
+        }
+
+        // 之前是关着的（没有节拍观察者），这里要把整套监控补起来
+        guard sponsorObserver != nil else {
+            startSponsorMonitoring()
+            return
+        }
+        loadSponsorSegments()
     }
 
     /// 在线流式兜底：通过本地代理把 CDN 字节流持续转发给 AVPlayer，

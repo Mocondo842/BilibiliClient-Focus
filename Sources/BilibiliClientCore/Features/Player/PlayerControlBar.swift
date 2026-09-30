@@ -20,6 +20,8 @@ struct PlayerBarConfig {
     /// 清晰度列表；空表示不显示画质入口（直播）
     var qualities: [PlayerController.Quality] = []
     var currentQualityId: Int?
+    /// 空降助手在进度条上要画的片段标记（空 = 不画）
+    var sponsorMarkers: [SponsorMarker] = []
     var onTogglePlay: @MainActor () -> Void = {}
     var onSeek: @MainActor (Double) -> Void = { _ in }
     var onSkip: @MainActor (Double) -> Void = { _ in }
@@ -43,6 +45,8 @@ final class PlayerBarModel: ObservableObject {
     @Published private(set) var danmakuEnabled = true
     @Published private(set) var qualities: [PlayerController.Quality] = []
     @Published private(set) var currentQualityId: Int?
+    /// 空降助手标记：跟着宿主推入的配置更新，不在节拍里重算。
+    @Published private(set) var sponsorMarkers: [SponsorMarker] = []
     /// 画中画入口是否可用（AVKit 未提供该入口时隐藏按钮）
     @Published var supportsPictureInPicture = false
 
@@ -109,6 +113,9 @@ final class PlayerBarModel: ObservableObject {
         }
         qualities = config.qualities
         currentQualityId = config.currentQualityId
+        if sponsorMarkers != config.sponsorMarkers {
+            sponsorMarkers = config.sponsorMarkers
+        }
     }
 
     func setFullscreen(_ fullscreen: Bool) {
@@ -373,7 +380,13 @@ struct PlayerControlBar: View {
                 .monospacedDigit()
                 .frame(width: 48, alignment: .leading)
 
-            slider
+            VStack(spacing: 2) {
+                slider
+                // 没有空降片段时这一层完全不出现，控制栏高度与改造前一致
+                if !model.sponsorMarkers.isEmpty {
+                    SponsorMarkerStrip(markers: model.sponsorMarkers, duration: model.duration)
+                }
+            }
 
             Text(Formatters.duration(Int(model.duration)))
                 .font(.system(size: 11, weight: .medium))
@@ -506,6 +519,61 @@ private struct ControlPill: ViewModifier {
 extension View {
     fileprivate func controlPill() -> some View {
         modifier(ControlPill())
+    }
+}
+
+// MARK: - 空降片段标记
+
+/// 空降片段的色块带，贴在进度条正下方，按时间比例摆放。
+///
+/// 不叠在系统 `Slider` 上是有原因的：macOS 的 Slider 轨道不透明，
+/// 画在背后会被轨道盖住，画在前面又会挡住滑块。另起一条细带既清楚
+/// 又完全不碰 Slider 自己的拖动手感。
+private struct SponsorMarkerStrip: View {
+    let markers: [SponsorMarker]
+    let duration: Double
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                ForEach(markers) { marker in
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color(hex: marker.category.markerColorHex) ?? .accentColor)
+                        .frame(width: max(2, geometry.size.width * fraction(marker)), height: 3)
+                        .offset(x: geometry.size.width * startFraction(marker))
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
+        }
+        .frame(height: 3)
+        // 让色块带与 Slider 轨道两端对齐（系统 Slider 两端会留出滑块半径的余量）
+        .padding(.horizontal, 8)
+        .allowsHitTesting(false)
+        .help("进度条上的色块：空降助手标记的可跳过片段")
+    }
+
+    private func startFraction(_ marker: SponsorMarker) -> Double {
+        guard duration > 0 else { return 0 }
+        return min(max(marker.start / duration, 0), 1)
+    }
+
+    private func fraction(_ marker: SponsorMarker) -> Double {
+        guard duration > 0 else { return 0 }
+        return min(max((marker.end - marker.start) / duration, 0), 1)
+    }
+}
+
+private extension Color {
+    /// `"#RRGGBB"` → Color；解析不出来返回 nil，由调用方兜底。
+    init?(hex: String) {
+        var value = hex
+        if value.hasPrefix("#") { value.removeFirst() }
+        guard value.count == 6, let rgb = UInt32(value, radix: 16) else { return nil }
+        self.init(.sRGB,
+                  red: Double((rgb >> 16) & 0xFF) / 255,
+                  green: Double((rgb >> 8) & 0xFF) / 255,
+                  blue: Double(rgb & 0xFF) / 255,
+                  opacity: 1)
     }
 }
 

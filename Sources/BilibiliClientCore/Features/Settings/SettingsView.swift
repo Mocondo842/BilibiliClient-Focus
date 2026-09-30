@@ -81,6 +81,11 @@ struct SettingsView: View {
     @AppStorage("upBarPosition") private var upBarPosition = UpBarPosition.top.rawValue
     @AppStorage("closeBehavior") private var closeBehavior = CloseBehavior.ask.rawValue
     @AppStorage("favoriteBehavior") private var favoriteBehavior = FavoriteBehavior.defaultFolder.rawValue
+    // 空降助手（键名与 SponsorPreferences 共用，播放器侧直接读 UserDefaults）
+    @AppStorage(SponsorPreferences.enabledKey) private var sponsorEnabled = true
+    @AppStorage(SponsorPreferences.modeKey) private var sponsorMode = SponsorSkipMode.automatic.rawValue
+    @AppStorage(SponsorPreferences.categoriesKey) private var sponsorCategories = SponsorPreferences.defaultCategoriesStorage
+    @AppStorage(SponsorPreferences.muteSegmentsKey) private var sponsorMutesSegments = true
     @State private var cacheCleared = false
 
     var body: some View {
@@ -94,6 +99,8 @@ struct SettingsView: View {
                     Divider()
                 }
                 danmakuSection.padding(.vertical, 16)
+                Divider()
+                sponsorSection.padding(.vertical, 16)
                 Divider()
                 displaySection.padding(.vertical, 16)
                 Divider()
@@ -313,6 +320,74 @@ struct SettingsView: View {
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
             .font(.headline)
+    }
+
+    // MARK: - 空降助手
+
+    private var sponsorSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("空降助手")
+            Toggle("自动跳过赞助片段", isOn: $sponsorEnabled)
+                .font(.body)
+
+            if sponsorEnabled {
+                Divider()
+
+                optionRow("处理方式") {
+                    Picker("处理方式", selection: $sponsorMode) {
+                        ForEach(SponsorSkipMode.allCases) { mode in
+                            Text(mode.label).tag(mode.rawValue)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .fixedSize()
+                }
+
+                Toggle("静音类片段静音通过", isOn: $sponsorMutesSegments)
+                    .font(.body)
+
+                Divider()
+
+                Text("跳过哪些分类")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                ForEach(SponsorCategory.allCases) { category in
+                    Toggle(category.displayName, isOn: categoryBinding(category))
+                        .font(.body)
+                }
+
+                Text("片段由网友标注，通过第三方公开服务（SponsorBlock 兼容接口）获取。请求只上传视频 ID 的哈希前缀，服务端无法得知你在看哪个视频。该服务由社区个人维护，不可用时播放不受影响；进度条上的色块表示该处有可跳过片段。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onChange(of: sponsorEnabled) { _, _ in notifySponsorSettingsChanged() }
+        .onChange(of: sponsorMode) { _, _ in notifySponsorSettingsChanged() }
+        .onChange(of: sponsorMutesSegments) { _, _ in notifySponsorSettingsChanged() }
+        .onChange(of: sponsorCategories) { _, _ in notifySponsorSettingsChanged() }
+    }
+
+    /// 单个分类的开关。分类集合以逗号分隔字符串存，这里做一层读写映射。
+    private func categoryBinding(_ category: SponsorCategory) -> Binding<Bool> {
+        Binding(
+            get: { SponsorPreferences.enabledCategories.contains(category) },
+            set: { isOn in
+                var enabled = SponsorPreferences.enabledCategories
+                if isOn {
+                    enabled.insert(category)
+                } else {
+                    enabled.remove(category)
+                }
+                sponsorCategories = SponsorPreferences.storageString(for: enabled)
+            }
+        )
+    }
+
+    /// 通知正在播放的页面按新设置重新筛片段。
+    private func notifySponsorSettingsChanged() {
+        NotificationCenter.default.post(name: .sponsorPreferencesDidChange, object: nil)
     }
 
     private func optionRow<Content: View>(_ title: String,

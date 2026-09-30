@@ -38,7 +38,18 @@ struct VideoPlayerSurface: View {
                     .id(player)
                 #endif
             }
+            // 空降助手轻提示：两个平台都在画面右上角浮一下；
+            // 可点「回退」把这段广告放回来，并让本场不再自动跳过它
+            if let notice = playerController.sponsorNotice {
+                SponsorNoticeBadge(notice: notice) {
+                    playerController.undoSponsorAction()
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .transition(.opacity)
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: playerController.sponsorNotice)
         .clipped()
     }
 
@@ -51,6 +62,7 @@ struct VideoPlayerSurface: View {
         config.danmakuEnabled = danmakuEnabled
         config.qualities = playerController.qualities
         config.currentQualityId = playerController.currentQualityId
+        config.sponsorMarkers = playerController.sponsorMarkers
         config.onTogglePlay = { playerController.togglePlay() }
         config.onSeek = { playerController.seek(to: $0) }
         config.onSkip = { playerController.skip(by: $0) }
