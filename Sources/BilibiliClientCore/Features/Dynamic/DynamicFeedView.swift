@@ -56,7 +56,7 @@ struct DynamicFeedView: View {
     }
 
     private var displayItems: [DynamicItem] {
-        guard selectedUP != nil else { return items }
+        guard selectedUP != nil else { return items.followOnly }
         return items.filter {
             $0.modules.moduleDynamic?.major?.type == "MAJOR_TYPE_ARCHIVE"
         }

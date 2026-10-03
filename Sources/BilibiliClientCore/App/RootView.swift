@@ -26,7 +26,7 @@ public struct RootView: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var router: AppRouter
     @AppStorage("appearance") private var appearance = AppearanceMode.system.rawValue
-    @State private var selection: SidebarItem? = .home
+    @State private var selection: SidebarItem? = .dynamics
     @State private var showLogin = false
     @State private var showAccountPanel = false
     @State private var searchText = ""
@@ -90,10 +90,6 @@ public struct RootView: View {
         // TabContent，不 conform View）。侧边栏里的「浏览 / 我的」分组与 macOS 侧边栏一致。
         TabView(selection: $selection) {
             TabSection("浏览") {
-                Tab("推荐", systemImage: SidebarItem.home.icon, value: SidebarItem.home) { tabStack(.home) }
-                Tab("分区", systemImage: SidebarItem.zones.icon, value: SidebarItem.zones) { tabStack(.zones) }
-                Tab("热门", systemImage: SidebarItem.popular.icon, value: SidebarItem.popular) { tabStack(.popular) }
-                Tab("直播", systemImage: SidebarItem.live.icon, value: SidebarItem.live) { tabStack(.live) }
                 Tab("动态", systemImage: SidebarItem.dynamics.icon, value: SidebarItem.dynamics) { tabStack(.dynamics) }
             }
             TabSection("我的") {
@@ -154,7 +150,7 @@ public struct RootView: View {
     private var sidebar: some View {
         List(selection: $selection) {
             Section("浏览") {
-                ForEach([SidebarItem.home, .zones, .popular, .live, .dynamics]) { item in
+                ForEach(DeRecommendation.browseItems) { item in
                     Label(item.rawValue, systemImage: item.icon)
                         .tag(item)
                 }
@@ -266,7 +262,7 @@ extension RootView {
         case .settings:
             SettingsView()
         case nil:
-            RecommendView()
+            DynamicFeedView()
         }
     }
 }

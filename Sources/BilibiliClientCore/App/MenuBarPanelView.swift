@@ -124,7 +124,7 @@ public struct MenuBarPanelView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     LazyVStack(spacing: 0) {
-                        ForEach(items) { item in
+                        ForEach(items.followOnly) { item in
                             MenuBarDynamicRow(item: item) { bvid in
                                 router.openVideo(bvid)
                             }
