@@ -69,17 +69,22 @@ jobs:
           RC=${PIPESTATUS[0]}
           set -e
           if [ "$RC" != "0" ]; then
-            echo "=== 构建脚本退出码 $RC；补一段诊断 ==="
-            # build_app.sh 里 actool 的 stdout 被 >/dev/null 吞掉，失败时只剩 set -e 静默退出，
-            # 所以这里把同一条 actool 命令重跑一遍，让真实报错进日志。
-            echo "--- 图标资源 ---"
-            ls -la assets/ assets/Bilibiliclient.icon/ assets/Bilibiliclient.icon/Assets/ 2>&1 | head -20
-            echo "--- actool 复跑（不重定向）---"
-            D="$(mktemp -d)"
-            "$ACTOOL" --compile "$D" --platform macosx --minimum-deployment-target 26.0 \
-              --app-icon Bilibiliclient --output-partial-info-plist "$D/partial.plist" \
-              assets/Bilibiliclient.icon 2>&1 | head -40 || true
-            echo "--- 产物 ---"; ls -la "$D" 2>&1 | head -10
+            # 诊断必须写进 build.log：CI 的步骤日志需要 admin 权限，只有 build.log 会进 ci-status 报告。
+            {
+              echo "=== 构建脚本退出码 $RC；以下为诊断 ==="
+              echo "--- actool 版本与路径 ---"; "$ACTOOL" --version 2>&1 | head -3; command -v actool || true
+              echo "--- 图标资源 ---"
+              ls -la assets/ 2>&1 | head -8
+              ls -laR assets/Bilibiliclient.icon/ 2>&1 | head -25
+              echo "--- icon.json ---"; plutil -p assets/Bilibiliclient.icon/icon.json 2>&1 | head -30
+              echo "--- actool 复跑（不重定向，让报错露出来）---"
+              D="$(mktemp -d)"
+              "$ACTOOL" --compile "$D" --platform macosx --minimum-deployment-target 26.0 \
+                --app-icon Bilibiliclient --output-partial-info-plist "$D/partial.plist" \
+                assets/Bilibiliclient.icon 2>&1 | head -60
+              echo "--- 复跑产物 ---"; ls -la "$D" 2>&1 | head -10
+              echo "=== 诊断结束 ==="
+            } >> build.log 2>&1
             exit "$RC"
           fi
 
@@ -169,11 +174,20 @@ jobs:
             head -n 40 build.log 2>/dev/null || echo "(没有 build.log)"
             echo '```'
             echo
-            echo "## 构建日志尾部（最后 120 行）"
-            echo
-            echo '```'
-            tail -n 120 build.log 2>/dev/null || echo "(没有 build.log：构建步骤未执行到)"
-            echo '```'
+            LINES=$(wc -l < build.log 2>/dev/null || echo 0)
+            if [ "$LINES" -le 300 ]; then
+              echo "## 构建日志全文（共 ${LINES} 行）"
+              echo
+              echo '```'
+              cat build.log 2>/dev/null || echo "(没有 build.log)"
+              echo '```'
+            else
+              echo "## 构建日志尾部（最后 150 行，全文 ${LINES} 行）"
+              echo
+              echo '```'
+              tail -n 150 build.log
+              echo '```'
+            fi
             echo
             echo "## 产物"
             echo
