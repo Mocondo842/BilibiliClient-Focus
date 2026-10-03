@@ -24,6 +24,7 @@ jobs:
       NO_OPEN: '1'             # CI 不需要自动打开 App（脚本默认会 open）
       KEEP_ARCHIVE: '1'        # 产出 dist/archive/<version>/*.zip
       ACTOOL: /Applications/Xcode.app/Contents/Developer/usr/bin/actool   # 脚本默认指向 Xcode-beta，runner 上不存在
+      SIGN_IDENTITY: '-'   # 关键：见下方「签名身份」注释——不设它脚本会在 runner 上静默退出
     steps:
       - name: 检出（完整历史）
         uses: actions/checkout@v4
@@ -52,6 +53,13 @@ jobs:
             spm-${{ runner.os }}-
 
       - name: 构建（release / arm64）
+        # 签名身份：runner 上没有任何代码签名证书，于是 build_app.sh 里
+        #   SIGN_IDENTITY="$(security find-identity … | grep -o '"Apple Development…"' | head -1)"
+        # 这条管道 grep 找不到东西就返回 1，在 set -e + pipefail 下**赋值语句本身失败**，
+        # 脚本当场静默退出（日志里连一行报错都没有，run #3/#4/#5 都是死在这）。
+        # 显式给 SIGN_IDENTITY='-' 让脚本走「已知身份」分支，直接用 ad-hoc 签名，绕开那段管道。
+        env:
+          TRACE: '1'   # 排查期开 xtrace：只有 trace 能看清 set -e 静默退出的位置
         run: |
           set -o pipefail
           # 关键：显式用 Xcode 的 SDK。build_app.sh 在检测到
@@ -65,13 +73,14 @@ jobs:
           echo "--- 宏插件目录 ---"
           ls "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins" 2>/dev/null | grep -i prev || echo "(toolchain 插件目录里没找到 Previews*)"
           set +e
-          ./scripts/build_app.sh release 2>&1 | tee build.log
+          bash ${TRACE:+-x} ./scripts/build_app.sh release 2>&1 | tee build.log
           RC=${PIPESTATUS[0]}
           set -e
           if [ "$RC" != "0" ]; then
             # 诊断必须写进 build.log：CI 的步骤日志需要 admin 权限，只有 build.log 会进 ci-status 报告。
             {
-              echo "=== 构建脚本退出码 $RC；以下为诊断 ==="
+              printf '=== 构建脚本退出码 rc=%s；以下为诊断 ===\n' "$RC"
+              grep -nE '^\+ ' build.log | tail -15 | sed 's/^/  trace: /'
               echo "--- actool 版本与路径 ---"; "$ACTOOL" --version 2>&1 | head -3; command -v actool || true
               echo "--- 图标资源 ---"
               ls -la assets/ 2>&1 | head -8
