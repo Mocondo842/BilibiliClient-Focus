@@ -235,7 +235,9 @@ final class PlayerController: ObservableObject {
             let asset = AVURLAsset(url: url, options: httpAssetOptions())
             player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
             player?.automaticallyWaitsToMinimizeStalling = true
-            player?.play()
+            // MP4 直链与 DASH 是两条路径，收尾（自动播放/恢复进度/解码信息/播完清理）必须共用，
+            // 否则往 1080P 及以下切清晰度会走这条路：从头播且解码信息不更新。
+            finishPlayerSetup(summary: Self.describeMP4(quality: qn, qualities: qualities, durl: first))
             startPlaybackMonitoring()
             state = .ready
             startReportLoop()
@@ -271,10 +273,7 @@ final class PlayerController: ObservableObject {
             let url = try await proxy.start(video: videoMedia, audio: audioMedia)
             player = AVPlayer(url: url)
             player?.automaticallyWaitsToMinimizeStalling = true
-            player?.play()
-            restorePendingResumeWhenReady()
-            observePlayToEnd()
-            streamSummary = Self.describe(video, qualities: qualities)
+            finishPlayerSetup(summary: Self.describe(video, qualities: qualities))
             startPlaybackMonitoring()
             startReportLoop()
             return nil
@@ -305,6 +304,16 @@ final class PlayerController: ObservableObject {
                 }
             }
         }
+    }
+
+    /// 两条播放路径共用的收尾：按设置起播、记录解码信息、就绪后恢复进度、播完清进度。
+    private func finishPlayerSetup(summary: String) {
+        streamSummary = summary
+        if PlaybackPreferences.autoplayOnOpen {
+            player?.play()
+        }
+        restorePendingResumeWhenReady()
+        observePlayToEnd()
     }
 
     /// 播放项就绪后再恢复进度（并只做一次）。
@@ -644,6 +653,25 @@ final class PlayerController: ObservableObject {
             }
         }
         return candidates.sorted { $0.id > $1.id }.first
+    }
+
+    /// MP4 直链路径的解码信息：清晰度名 · MP4 直链 · 时长 · 体积。
+    private static func describeMP4(quality: Int, qualities: [Quality], durl: PlayURLData.DURL) -> String {
+        var parts: [String] = []
+        if let name = qualities.first(where: { $0.id == quality })?.name {
+            parts.append(name)
+        } else {
+            parts.append("qn \(quality)")
+        }
+        parts.append("MP4 直链")
+        let seconds = Double(durl.length) / 1000
+        if seconds > 0 {
+            parts.append(String(format: "%d:%02d", Int(seconds) / 60, Int(seconds) % 60))
+        }
+        if durl.size > 0 {
+            parts.append(String(format: "%.1f MB", Double(durl.size) / 1_048_576))
+        }
+        return parts.joined(separator: " · ")
     }
 
     /// 「解码信息」文案：清晰度名 · 编码 · 分辨率 · 帧率 · 码率。

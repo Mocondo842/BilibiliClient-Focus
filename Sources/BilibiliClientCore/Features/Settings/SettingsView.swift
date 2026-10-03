@@ -91,6 +91,7 @@ struct SettingsView: View {
     @AppStorage(PlaybackPreferences.qualityKey) private var preferredQuality = PlaybackPreferences.QualityChoice.p1080.rawValue
     @AppStorage(PlaybackPreferences.codecKey) private var preferredCodec = PlaybackPreferences.Codec.auto.rawValue
     @AppStorage(PlaybackPreferences.commentFontSizeKey) private var commentFontSize = PlaybackPreferences.CommentFontSize.system.rawValue
+    @AppStorage(PlaybackPreferences.autoplayKey) private var autoplayOnOpen = true
 
     var body: some View {
         ScrollView {
@@ -229,6 +230,7 @@ struct SettingsView: View {
     private var playbackSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("播放")
+            Toggle("打开视频后自动播放", isOn: $autoplayOnOpen)
             optionRow("优先清晰度") {
                 Picker("优先清晰度", selection: $preferredQuality) {
                     ForEach(PlaybackPreferences.QualityChoice.allCases) { choice in

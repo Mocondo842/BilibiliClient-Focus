@@ -312,23 +312,23 @@ struct DynamicCommentRowView: View {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
                     Text(comment.member?.uname ?? "匿名用户")
-                        .font(.callout.weight(.medium))
+                        .font(CommentFonts.body.weight(.medium))
                         .lineLimit(1)
                     Text(Formatters.timeAgo(comment.ctime ?? 0))
-                        .font(.caption2)
+                        .font(CommentFonts.caption2)
                         .foregroundStyle(.tertiary)
                     Spacer()
                 }
 
                 Text(comment.content?.message ?? "")
-                    .font(.callout)
+                    .font(CommentFonts.body)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 14) {
                     Label(Formatters.count(comment.like ?? 0), systemImage: "hand.thumbsup")
                 }
-                .font(.caption)
+                .font(CommentFonts.caption)
                 .foregroundStyle(.secondary)
             }
         }

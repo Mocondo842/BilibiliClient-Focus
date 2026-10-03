@@ -109,6 +109,15 @@ enum PlaybackPreferences {
 
     static let commentFontSizeKey = "commentFontSize"
 
+    // MARK: - 自动播放
+
+    static let autoplayKey = "autoplayOnOpen"
+
+    /// 打开视频后是否自动开始播放。默认 true（= 上游行为）。
+    static var autoplayOnOpen: Bool {
+        UserDefaults.standard.object(forKey: autoplayKey) as? Bool ?? true
+    }
+
     static var commentFontSize: CommentFontSize {
         CommentFontSize(rawValue: UserDefaults.standard.string(forKey: commentFontSizeKey) ?? "") ?? .system
     }
