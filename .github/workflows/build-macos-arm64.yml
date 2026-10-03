@@ -58,8 +58,7 @@ jobs:
         # 这条管道 grep 找不到东西就返回 1，在 set -e + pipefail 下**赋值语句本身失败**，
         # 脚本当场静默退出（日志里连一行报错都没有，run #3/#4/#5 都是死在这）。
         # 显式给 SIGN_IDENTITY='-' 让脚本走「已知身份」分支，直接用 ad-hoc 签名，绕开那段管道。
-        env:
-          # TRACE: '1'  # 排查时打开：bash -x，能看到 set -e 静默退出的确切位置
+        # 排查构建失败时，把下面这行的 ${TRACE:+-x} 用 TRACE=1 打开（或在 run 里直接写 bash -x）。
         run: |
           set -o pipefail
           # 关键：显式用 Xcode 的 SDK。build_app.sh 在检测到
