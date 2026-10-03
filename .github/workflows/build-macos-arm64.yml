@@ -64,7 +64,24 @@ jobs:
           ls -d /Library/Developer/CommandLineTools/SDKs/* 2>/dev/null || echo "(runner 上没有 CLT SDK 目录)"
           echo "--- 宏插件目录 ---"
           ls "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins" 2>/dev/null | grep -i prev || echo "(toolchain 插件目录里没找到 Previews*)"
+          set +e
           ./scripts/build_app.sh release 2>&1 | tee build.log
+          RC=${PIPESTATUS[0]}
+          set -e
+          if [ "$RC" != "0" ]; then
+            echo "=== 构建脚本退出码 $RC；补一段诊断 ==="
+            # build_app.sh 里 actool 的 stdout 被 >/dev/null 吞掉，失败时只剩 set -e 静默退出，
+            # 所以这里把同一条 actool 命令重跑一遍，让真实报错进日志。
+            echo "--- 图标资源 ---"
+            ls -la assets/ assets/Bilibiliclient.icon/ assets/Bilibiliclient.icon/Assets/ 2>&1 | head -20
+            echo "--- actool 复跑（不重定向）---"
+            D="$(mktemp -d)"
+            "$ACTOOL" --compile "$D" --platform macosx --minimum-deployment-target 26.0 \
+              --app-icon Bilibiliclient --output-partial-info-plist "$D/partial.plist" \
+              assets/Bilibiliclient.icon 2>&1 | head -40 || true
+            echo "--- 产物 ---"; ls -la "$D" 2>&1 | head -10
+            exit "$RC"
+          fi
 
       - name: 静态自检（架构 / plist / 签名 / 去推荐化锚点）
         run: |
