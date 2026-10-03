@@ -143,8 +143,9 @@ jobs:
           set -euo pipefail
           gh release view ci-macos-arm64 >/dev/null 2>&1 \
             || gh release create ci-macos-arm64 --prerelease --target "$GITHUB_SHA" \
-                 --title "CI 构建：macOS arm64（滚动）" \
-                 --notes "由 GitHub Actions 自动构建的 ad-hoc 签名产物；首次打开需右键→打开。"
+                 --title "CI 构建：macOS arm64 + iOS 未签名 IPA（滚动）" \
+                 --notes "由 GitHub Actions 自动构建：macOS 版 ad-hoc 签名（首次打开需右键→打开）；iOS 版未签名 IPA（用 AltStore/Sideloadly 自签）。" \
+            || true
           gh release upload ci-macos-arm64 "$OUT" "$OUT.sha256" --clobber
           echo "release: https://github.com/$GITHUB_REPOSITORY/releases/tag/ci-macos-arm64"
 
@@ -157,7 +158,7 @@ jobs:
             echo
             echo "=== 预发布资产复核（在 runner 上把刚上传的东西拉回来） ==="
             D="$(mktemp -d)"
-            if gh release download ci-macos-arm64 -p '*.zip' -p '*.sha256' -D "$D" 2>&1; then
+            if gh release download ci-macos-arm64 -p '*.app.zip' -p '*.app.zip.sha256' -D "$D" 2>&1; then
               ls -l "$D"
               EXPECT="$(cut -d' ' -f1 "$D"/*.sha256)"
               ACTUAL="$(shasum -a 256 "$D"/*.zip | cut -d' ' -f1)"
@@ -180,9 +181,9 @@ jobs:
           set -uo pipefail
           REPO="${{ github.repository }}"
           URL="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
-          F="/tmp/run-${{ github.run_number }}.md"
+          F="/tmp/run-${{ github.run_number }}-macos.md"
           {
-            echo "# CI 运行 #${{ github.run_number }} — ${{ job.status }}"
+            echo "# CI 运行 #${{ github.run_number }}（macOS arm64）— ${{ job.status }}"
             echo
             echo "| 项 | 值 |"
             echo "|---|---|"
@@ -240,3 +241,192 @@ jobs:
           git push -q origin HEAD:ci-status \
             || git push -q --force origin HEAD:ci-status
           echo "已写入 ci-status 分支"
+
+  ios-arm64:
+    name: iOS arm64 未签名 IPA（macos-26 / Xcode 26）
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      # 与 macOS job 的差别：这里**绝不设 SDKROOT** —— build_ios_app.sh 明确要求
+      # （SwiftPM 连 manifest 都会用 SDKROOT 编译，会被 iOS SDK 带偏）。
+      ACTOOL: /Applications/Xcode.app/Contents/Developer/usr/bin/actool
+      NO_OPEN: '1'
+    steps:
+      - name: 检出（完整历史）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # CFBundleVersion = 提交数
+
+      - name: 环境自检
+        run: |
+          set -euo pipefail
+          uname -m; sw_vers; xcodebuild -version
+          echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-path)"
+          echo "actool: $(xcrun --find actool)"
+          echo "commits: $(git rev-list --count HEAD)"
+          echo "SDKROOT(应为空): '${SDKROOT:-}'"
+
+      - name: 缓存 SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+          key: spm-ios-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            spm-ios-${{ runner.os }}-
+
+      - name: 构建未签名 IPA
+        run: |
+          set +e
+          ./scripts/build_ios_app.sh release 2>&1 | tee build-ios.log
+          RC=${PIPESTATUS[0]}
+          set -e
+          if [ "$RC" != "0" ]; then
+            {
+              printf '=== 构建脚本退出码 rc=%s；以下为诊断 ===\n' "$RC"
+              grep -nE '^\+ ' build-ios.log | tail -15 | sed 's/^/  trace: /'
+              echo "--- actool 复跑（脚本里它的 stdout 被 >/dev/null 吞掉）---"
+              D="$(mktemp -d)"
+              "$ACTOOL" --compile "$D" --platform iphoneos --minimum-deployment-target 26.0 \
+                --app-icon Bilibiliclient --output-partial-info-plist "$D/partial.plist" \
+                assets/Bilibiliclient.icon 2>&1 | head -40
+              ls -la "$D" 2>&1 | head -8
+              echo "=== 诊断结束 ==="
+            } >> build-ios.log 2>&1
+            exit "$RC"
+          fi
+
+      - name: 静态自检（IPA / plist / 架构）
+        run: |
+          set -euo pipefail
+          IPA="dist/ios/BilibiliClient-unsigned.ipa"
+          test -f "$IPA"
+          ls -l "$IPA"
+          unzip -l "$IPA" | head -12
+          D="$(mktemp -d)"; unzip -q "$IPA" -d "$D"
+          APP="$D/Payload/BilibiliClient.app"
+          echo "--- 架构 ---"; lipo -archs "$APP/BilibiliClient"
+          lipo -archs "$APP/BilibiliClient" | grep -q arm64
+          echo "--- 构建平台 ---"; vtool -show-build "$APP/BilibiliClient" | head -8 || true
+          echo "--- Info.plist 关键键 ---"
+          for k in CFBundleShortVersionString CFBundleVersion MinimumOSVersion CFBundleIcons CFBundleIcons~ipad; do
+            printf '%s = %s\n' "$k" "$(/usr/libexec/PlistBuddy -c "Print :$k" "$APP/Info.plist" 2>/dev/null | head -3 | tr '\n' ' ' || echo '(缺)')"
+          done
+          echo "--- 签名状态（应为未签名）---"
+          codesign -dv "$APP" 2>&1 | head -3 || echo "(未签名，符合预期：真机 IPA 交给自签工具)"
+          echo "--- 去推荐化锚点守卫 ---"
+          ./scripts/fork_check.sh
+
+      - name: 产物哈希
+        id: ios_artifact
+        run: |
+          set -euo pipefail
+          IPA="dist/ios/BilibiliClient-unsigned.ipa"
+          OUT="dist/BilibiliClient-$(cat version.txt)-ios-arm64-unsigned.ipa"
+          cp "$IPA" "$OUT"
+          shasum -a 256 "$OUT" | tee "$OUT.sha256"
+          echo "path=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: 上传 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BilibiliClient-ios-arm64-${{ github.run_number }}
+          path: |
+            dist/BilibiliClient-*-ios-arm64-unsigned.ipa
+            dist/BilibiliClient-*-ios-arm64-unsigned.ipa.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 更新滚动预发布
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUT: ${{ steps.ios_artifact.outputs.path }}
+        run: |
+          set -euo pipefail
+          gh release view ci-macos-arm64 >/dev/null 2>&1 \
+            || gh release create ci-macos-arm64 --prerelease --target "$GITHUB_SHA" \
+                 --title "CI 构建：macOS arm64 + iOS 未签名 IPA（滚动）" \
+                 --notes "由 GitHub Actions 自动构建：macOS 版 ad-hoc 签名（首次打开需右键→打开）；iOS 版未签名 IPA（用 AltStore/Sideloadly 自签）。" \
+            || true
+          gh release upload ci-macos-arm64 "$OUT" "$OUT.sha256" --clobber
+
+      - name: 复核预发布资产（下载回来验哈希）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          {
+            echo
+            echo "=== 预发布资产复核（iOS） ==="
+            D="$(mktemp -d)"
+            if gh release download ci-macos-arm64 -p '*.ipa' -p '*.ipa.sha256' -D "$D" 2>&1; then
+              ls -l "$D"
+              EXPECT="$(cut -d' ' -f1 "$D"/*.ipa.sha256)"
+              ACTUAL="$(shasum -a 256 "$D"/*.ipa | cut -d' ' -f1)"
+              if [ "$EXPECT" = "${ACTUAL}" ]; then
+                echo "iOS 预发布资产校验：OK（sha256=${ACTUAL}）"
+              else
+                echo "iOS 预发布资产校验：FAILED（期望 ${EXPECT} / 实际 ${ACTUAL}）"
+              fi
+            else
+              echo "iOS 预发布资产校验：下载失败"
+            fi
+            echo "=== 复核结束 ==="
+          } >> build-ios.log 2>&1
+
+      - name: 写自检报告到 ci-status 分支
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          REPO="${{ github.repository }}"
+          URL="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          F="/tmp/run-${{ github.run_number }}-ios.md"
+          {
+            echo "# CI 运行 #${{ github.run_number }}（iOS arm64 未签名 IPA）— ${{ job.status }}"
+            echo
+            echo "| 项 | 值 |"
+            echo "|---|---|"
+            echo "| 分支 / 提交 | \`${{ github.ref_name }}\` @ \`${{ github.sha }}\` |"
+            echo "| 触发 | ${{ github.event_name }} by ${{ github.actor }} |"
+            echo "| 结果 | **${{ job.status }}** |"
+            echo "| Runner | $(uname -m) / macOS $(sw_vers -productVersion) |"
+            echo "| Xcode | $(xcodebuild -version 2>/dev/null | tr '\n' ' ') |"
+            echo "| iOS SDK | $(xcrun --sdk iphoneos --show-sdk-path) |"
+            echo "| Run 页面 | https://github.com/$REPO/actions/runs/${{ github.run_id }} |"
+            echo
+            echo "## 关键行（错误）"
+            echo
+            echo '```'
+            grep -nE "error:|Using SDK:|rc=" build-ios.log 2>/dev/null | head -30 || echo "(无)"
+            echo '```'
+            echo
+            LINES=$(wc -l < build-ios.log 2>/dev/null || echo 0)
+            if [ "$LINES" -le 300 ]; then
+              echo "## 构建日志全文（共 ${LINES} 行）"
+              echo; echo '```'; cat build-ios.log 2>/dev/null || echo "(没有 build-ios.log)"; echo '```'
+            else
+              echo "## 构建日志尾部（最后 150 行，全文 ${LINES} 行）"
+              echo; echo '```'; tail -n 150 build-ios.log; echo '```'
+            fi
+            echo
+            echo "## 产物"
+            echo
+            echo '```'
+            ls -l dist/BilibiliClient-*-ios-arm64-unsigned.ipa* 2>/dev/null || echo "(无)"
+            cat dist/BilibiliClient-*-ios-arm64-unsigned.ipa.sha256 2>/dev/null || true
+            echo '```'
+          } > "$F"
+          rm -rf /tmp/cs && mkdir -p /tmp/cs && cd /tmp/cs
+          git init -q
+          git remote add origin "$URL"
+          if git fetch -q --depth 1 origin ci-status 2>/dev/null; then git reset -q --hard FETCH_HEAD; fi
+          cp "$F" .
+          git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com \
+            commit -qm "ci: run #${{ github.run_number }} ios (${{ job.status }})" || true
+          git push -q origin HEAD:ci-status \
+            || git push -q --force origin HEAD:ci-status
+          echo "已写入 ci-status 分支（ios）"
