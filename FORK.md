@@ -40,6 +40,16 @@
   `git checkout --theirs <冲突文件>` 先接受上游版本，再在新路径上重放 4 处锚点（共 7 行），`./scripts/fork_check.sh` 全绿后提交。
 - **C. 不想维护分支历史**：在干净的上游树上 `git apply --3way <patch>` 重放（实测干净），冲突只会出现在上表那 4 个上游文件里。
 
+## CI（macOS arm64）
+
+`.github/workflows/build-macos-arm64.yml` 在 GitHub 托管的 `macos-26`（Apple Silicon）上打包：
+
+- 触发：推送到本分支；`paths-ignore` 跳过纯文档改动
+- 产物：`BilibiliClient-<version>-macos-arm64.app.zip`（ad-hoc 签名）→ 上传为 workflow artifact，并挂到滚动预发布 `ci-macos-arm64`
+- 失败诊断：无论成败都写 `ci-status` 分支（含 SDK/工具链版本、错误行、日志头尾、产物 sha256），无需登录即可读
+- 需要的 5 个环境覆盖（都在 workflow 里）：`SDKROOT=$(xcrun --show-sdk-path)`、`ACTOOL`、`SIGN_IDENTITY='-'`、`NO_OPEN=1`、`KEEP_ARCHIVE=1`；`fetch-depth: 0` 保 `CFBundleVersion`
+- 经验教训见工作区 `docs/github-actions-macos-arm64-lessons.md`
+
 ## 本机环境说明
 
 这台机器 `$HOME` 只读，所以 git 身份与 SSH 配置都写在仓库内：身份在 `.git/config`，SSH 走 `core.sshCommand`（配置见工作区 `.ssh/config`）。推送用 deploy key（只对单个仓库生效），见仓库 Settings → Deploy keys。
