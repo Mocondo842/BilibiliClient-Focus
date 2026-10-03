@@ -54,6 +54,16 @@ jobs:
       - name: 构建（release / arm64）
         run: |
           set -o pipefail
+          # 关键：显式用 Xcode 的 SDK。build_app.sh 在检测到
+          # /Library/Developer/CommandLineTools/SDKs/MacOSX<ver>.sdk 时会改用 CLT SDK，
+          # 而 runner 上那个路径存在且版本与 Xcode 不一致 —— 实测会让 SwiftUI 的宏插件
+          # (PreviewsMacros，被依赖 swiftui-math 的 #Preview 使用) 找不到，构建直接失败。
+          export SDKROOT="$(xcrun --show-sdk-path)"
+          echo "xcode-select: $(xcode-select -p)"
+          echo "SDKROOT=$SDKROOT"
+          ls -d /Library/Developer/CommandLineTools/SDKs/* 2>/dev/null || echo "(runner 上没有 CLT SDK 目录)"
+          echo "--- 宏插件目录 ---"
+          ls "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins" 2>/dev/null | grep -i prev || echo "(toolchain 插件目录里没找到 Previews*)"
           ./scripts/build_app.sh release 2>&1 | tee build.log
 
       - name: 静态自检（架构 / plist / 签名 / 去推荐化锚点）
@@ -130,6 +140,18 @@ jobs:
             echo "| Swift | $(swift --version 2>/dev/null | head -1) |"
             echo "| Run 页面 | https://github.com/$REPO/actions/runs/${{ github.run_id }} |"
             echo
+            echo "## 关键行（SDK / 错误）"
+            echo
+            echo '```'
+            grep -nE "Using SDK:|SDKROOT=|xcode-select:|error:|plugin for module" build.log 2>/dev/null | head -40 || echo "(无)"
+            echo '```'
+            echo
+            echo "## 构建日志开头（前 40 行）"
+            echo
+            echo '```'
+            head -n 40 build.log 2>/dev/null || echo "(没有 build.log)"
+            echo '```'
+            echo
             echo "## 构建日志尾部（最后 120 行）"
             echo
             echo '```'
@@ -142,14 +164,15 @@ jobs:
             ls -l dist/BilibiliClient-*-macos-arm64.app.zip* 2>/dev/null || echo "(无)"
             echo '```'
           } > "$F"
-          rm -rf /tmp/cs
-          if ! git clone -q --depth 1 --branch ci-status "$URL" /tmp/cs 2>/dev/null; then
-            git clone -q "$URL" /tmp/cs
-            git -C /tmp/cs checkout -q --orphan ci-status
-            git -C /tmp/cs rm -rq --ignore-unmatch . >/dev/null 2>&1 || true
-          fi
-          cp "$F" /tmp/cs/
-          git -C /tmp/cs add -A
-          git -C /tmp/cs -c user.name=ci -c user.email=ci@users.noreply.github.com \
+          # 只放报告：用一个临时仓库，避免把整份源码也提交进 ci-status
+          rm -rf /tmp/cs && mkdir -p /tmp/cs && cd /tmp/cs
+          git init -q
+          git remote add origin "$URL"
+          if git fetch -q --depth 1 origin ci-status 2>/dev/null; then git reset -q --hard FETCH_HEAD; fi
+          cp "$F" .
+          git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com \
             commit -qm "ci: run #${{ github.run_number }} (${{ job.status }})" || true
-          git -C /tmp/cs push -q origin HEAD:ci-status && echo "已写入 ci-status 分支"
+          git push -q origin HEAD:ci-status \
+            || git push -q --force origin HEAD:ci-status
+          echo "已写入 ci-status 分支"
