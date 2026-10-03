@@ -82,7 +82,9 @@ cp "$ICON_BUILD_DIR/Assets.car" "$APP_DIR/Contents/Resources/Assets.car"
 
 # 自动更新（Sparkle）：feed 地址与公钥。SPARKLE_FEED_URL 可用环境变量覆盖，
 # 便于本地起一个 http 服务做端到端演示（本地地址会自动放开 ATS 本地网络限制）。
-SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://raw.githubusercontent.com/Mora-han/BilibiliClient/main/docs/appcast.xml}"
+# 去推荐化 fork：默认指向本分支自己的 appcast，避免上游 feed 把打过补丁的构建当旧版覆盖回去。
+# 本分支不发布 release，因此永远查不到更新；将来要发布自己的版本时换成你的 raw 地址。
+SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://example.invalid/bilibiliclient-fork/appcast.xml}"
 SPARKLE_PUBLIC_KEY="${SPARKLE_PUBLIC_KEY:-9cFE7AG3SzRLHsDfRsNHfPJeJ8Za/oH6Yrz4kYGoUwQ=}"
 SPARKLE_ATS=""
 case "$SPARKLE_FEED_URL" in
