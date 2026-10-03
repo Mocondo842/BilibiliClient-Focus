@@ -43,7 +43,7 @@ enum DeRecommendation {
     ///    这类条目要么进黑名单，要么留给 `FORK.md` 的实机核对项（§9 V2）处置。
     static func keeps(_ item: DynamicItem) -> Bool {
         if blockedItemTypes.contains(item.type) { return false }
-        if let major = item.modules.moduleDynamic?.major, blockedMajorTypes.contains(major.type) { return false }
+        if let majorType = item.modules.moduleDynamic?.major?.type, blockedMajorTypes.contains(majorType) { return false }
         return item.modules.moduleDynamic != nil || item.orig != nil
     }
 }
