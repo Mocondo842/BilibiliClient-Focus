@@ -28,6 +28,9 @@
 1. 上游文件只允许出现锚点级改动（去推荐化 9 行 + 播放/评论/动态三类功能各几行）；任何新逻辑进：
    - `Sources/BilibiliClientCore/DeRecommend/` —— 去推荐化判定
    - `Sources/BilibiliClientCore/FocusExtras/` —— 本 fork 的功能增量（播放偏好、本地播放进度、评论字号）
+   上游文件里与功能相关的锚点（`items.followOnly`、`videoOnly`、`PlaybackProgressStore`、
+   `PlaybackPreferences.initialQuality`、`PlaybackPreferences.preferredStreams`、`CommentFonts.`）
+   由 `scripts/fork_check.sh` 一并看守：改实现时同步改守卫，否则 CI 会红——这是故意的。
 2. 不碰上游「每次发布 / 每次构建必改或必生成」的文件：`version.txt`、`docs/appcast.xml`、`AGENTS.md`、`Sources/BilibiliClientCore/Generated/BuildInfo.generated.swift`、`Package.resolved`。
    这一条与上游 `AGENTS.md` 的「每次提交自动升 version.txt」相左，是刻意的：我们升号会让每次同步都在这同一行上冲突。
 3. 不删任何类型 / 端点 / View / 设置项——上游的单向删改不会与我们的改动互斥。

@@ -29,7 +29,12 @@ need 'ForEach\(DeRecommendation\.browseItems\)' '侧边栏/标签栏用补丁清
 if grep -rA1 'case nil:' Sources --include=*.swift | grep -q 'DynamicFeedView()'; then ok "空选中回落到动态"; else bad "空选中回落（应为 DynamicFeedView）"; fi
 forbid 'Tab\("(推荐|分区|热门|直播)"' 'iOS 标签栏不含推荐/分区/热门/直播'
 echo "[3/4] 过滤"
-need 'guard selectedUP != nil else \{ return items\.followOnly \}' '动态流过滤'
+need 'items\.followOnly' '去推荐化：动态流过滤仍在'
+need 'videoOnly' '仅视频筛选仍在'
+need 'PlaybackProgressStore' '本地播放进度仍在'
+need 'PlaybackPreferences\.initialQuality' '优先清晰度仍在'
+need 'PlaybackPreferences\.preferredStreams' '优先编码仍在'
+need 'CommentFonts\.' '评论字号缩放仍在'
 need 'ForEach\(items\.followOnly\)' '菜单栏面板过滤'
 echo
 echo "[4/4] 自动更新"
