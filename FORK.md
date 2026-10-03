@@ -50,7 +50,7 @@
 - 两个 job 的诊断分别写 `ci-status` 的 `run-<N>-macos.md` / `run-<N>-ios.md`（并发推送会撞车，故分文件）
 - 失败诊断：无论成败都写 `ci-status` 分支（含 SDK/工具链版本、错误行、日志头尾、产物 sha256），无需登录即可读
 - 需要的 5 个环境覆盖（都在 workflow 里）：`SDKROOT=$(xcrun --show-sdk-path)`、`ACTOOL`、`SIGN_IDENTITY='-'`、`NO_OPEN=1`、`KEEP_ARCHIVE=1`；`fetch-depth: 0` 保 `CFBundleVersion`
-- 经验教训见工作区 `docs/github-actions-macos-arm64-lessons.md`
+- 经验教训：仓库内 `docs/ci-lessons-macos-arm64.md`（同内容的工作区主副本见 `docs/github-actions-macos-arm64-lessons.md`；该文同时也是 MemSearch 的记忆条目 `topic-github-actions-macos-arm64`）
 
 ## 本机环境说明
 
