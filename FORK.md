@@ -45,7 +45,9 @@
 `.github/workflows/build-macos-arm64.yml` 在 GitHub 托管的 `macos-26`（Apple Silicon）上打包：
 
 - 触发：推送到本分支；`paths-ignore` 跳过纯文档改动
-- 产物：`BilibiliClient-<version>-macos-arm64.app.zip`（ad-hoc 签名）→ 上传为 workflow artifact，并挂到滚动预发布 `ci-macos-arm64`
+- 两个 job 并行：macOS（`.app.zip`，ad-hoc 签名）与 iOS（未签名 `.ipa`）
+- 产物：`BilibiliClient-<version>-macos-arm64.app.zip`、`BilibiliClient-<version>-ios-arm64-unsigned.ipa` → 上传为 workflow artifact，并挂到滚动预发布 `ci-macos-arm64`
+- 两个 job 的诊断分别写 `ci-status` 的 `run-<N>-macos.md` / `run-<N>-ios.md`（并发推送会撞车，故分文件）
 - 失败诊断：无论成败都写 `ci-status` 分支（含 SDK/工具链版本、错误行、日志头尾、产物 sha256），无需登录即可读
 - 需要的 5 个环境覆盖（都在 workflow 里）：`SDKROOT=$(xcrun --show-sdk-path)`、`ACTOOL`、`SIGN_IDENTITY='-'`、`NO_OPEN=1`、`KEEP_ARCHIVE=1`；`fetch-depth: 0` 保 `CFBundleVersion`
 - 经验教训见工作区 `docs/github-actions-macos-arm64-lessons.md`
