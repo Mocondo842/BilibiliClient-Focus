@@ -162,9 +162,9 @@ jobs:
               EXPECT="$(cut -d' ' -f1 "$D"/*.sha256)"
               ACTUAL="$(shasum -a 256 "$D"/*.zip | cut -d' ' -f1)"
               if [ "$EXPECT" = "$ACTUAL" ]; then
-                echo "预发布资产校验：OK（sha256=$ACTUAL）"
+                echo "预发布资产校验：OK（sha256=${ACTUAL}）"
               else
-                echo "预发布资产校验：FAILED（期望 $EXPECT / 实际 $ACTUAL）"
+                echo "预发布资产校验：FAILED（期望 ${EXPECT} / 实际 ${ACTUAL}）"
               fi
             else
               echo "预发布资产校验：下载失败（release 或资产没建起来）"
