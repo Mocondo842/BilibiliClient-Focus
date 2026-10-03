@@ -1,0 +1,155 @@
+name: build-macos-arm64
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [derec-layout]
+    paths-ignore:
+      - '**/*.md'
+      - 'cross-review/**'
+
+concurrency:
+  group: build-macos-arm64-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  macos-arm64:
+    name: macOS arm64（macos-26 / Xcode 26）
+    runs-on: macos-26          # GitHub 托管的 Apple Silicon runner（GA）
+    timeout-minutes: 45
+    env:
+      NO_OPEN: '1'             # CI 不需要自动打开 App（脚本默认会 open）
+      KEEP_ARCHIVE: '1'        # 产出 dist/archive/<version>/*.zip
+      ACTOOL: /Applications/Xcode.app/Contents/Developer/usr/bin/actool   # 脚本默认指向 Xcode-beta，runner 上不存在
+    steps:
+      - name: 检出（完整历史）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # CFBundleVersion = git 提交数，浅克隆会退化成 1
+
+      - name: 环境自检
+        run: |
+          set -euo pipefail
+          echo "runner arch: $(uname -m)"
+          sw_vers
+          xcodebuild -version
+          swift --version
+          echo "SDK: $(xcrun --show-sdk-path)"
+          echo "actool: $(xcrun --find actool)"
+          echo "commits: $(git rev-list --count HEAD)"
+
+      - name: 缓存 SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      - name: 构建（release / arm64）
+        run: |
+          set -o pipefail
+          ./scripts/build_app.sh release 2>&1 | tee build.log
+
+      - name: 静态自检（架构 / plist / 签名 / 去推荐化锚点）
+        run: |
+          set -euo pipefail
+          APP="dist/BilibiliClient.app"
+          test -d "$APP"
+          ARCHS="$(lipo -archs "$APP/Contents/MacOS/BilibiliClient")"
+          echo "Mach-O 架构: $ARCHS"
+          case "$ARCHS" in *arm64*) ;; *) echo "::error::产物不是 arm64"; exit 1;; esac
+          echo "--- Info.plist 关键键 ---"
+          for k in CFBundleShortVersionString CFBundleVersion LSMinimumSystemVersion SUFeedURL; do
+            printf '%s = %s\n' "$k" "$(/usr/libexec/PlistBuddy -c "Print :$k" "$APP/Contents/Info.plist" 2>/dev/null || echo '(缺)')"
+          done
+          echo "--- 签名 ---"
+          codesign -dv "$APP" 2>&1 | head -3 || true
+          echo "--- 去推荐化锚点守卫 ---"
+          ./scripts/fork_check.sh
+          echo "--- 归档 ---"
+          ls -l dist/archive/*/*.zip
+
+      - name: 产物哈希
+        id: artifact
+        run: |
+          set -euo pipefail
+          ZIP="$(ls dist/archive/*/*.zip | head -1)"
+          OUT="dist/BilibiliClient-$(cat version.txt)-macos-arm64.app.zip"
+          cp "$ZIP" "$OUT"
+          shasum -a 256 "$OUT" | tee "$OUT.sha256"
+          echo "path=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: 上传 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BilibiliClient-macos-arm64-${{ github.run_number }}
+          path: |
+            dist/BilibiliClient-*-macos-arm64.app.zip
+            dist/BilibiliClient-*-macos-arm64.app.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 更新滚动预发布（免登录下载）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUT: ${{ steps.artifact.outputs.path }}
+        run: |
+          set -euo pipefail
+          gh release view ci-macos-arm64 >/dev/null 2>&1 \
+            || gh release create ci-macos-arm64 --prerelease --target "$GITHUB_SHA" \
+                 --title "CI 构建：macOS arm64（滚动）" \
+                 --notes "由 GitHub Actions 自动构建的 ad-hoc 签名产物；首次打开需右键→打开。"
+          gh release upload ci-macos-arm64 "$OUT" "$OUT.sha256" --clobber
+          echo "release: https://github.com/$GITHUB_REPOSITORY/releases/tag/ci-macos-arm64"
+
+      - name: 写自检报告到 ci-status 分支
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          REPO="${{ github.repository }}"
+          URL="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          F="/tmp/run-${{ github.run_number }}.md"
+          {
+            echo "# CI 运行 #${{ github.run_number }} — ${{ job.status }}"
+            echo
+            echo "| 项 | 值 |"
+            echo "|---|---|"
+            echo "| 分支 / 提交 | \`${{ github.ref_name }}\` @ \`${{ github.sha }}\` |"
+            echo "| 触发 | ${{ github.event_name }} by ${{ github.actor }} |"
+            echo "| 结果 | **${{ job.status }}** |"
+            echo "| Runner | $(uname -m) / macOS $(sw_vers -productVersion) |"
+            echo "| Xcode | $(xcodebuild -version 2>/dev/null | tr '\n' ' ') |"
+            echo "| Swift | $(swift --version 2>/dev/null | head -1) |"
+            echo "| Run 页面 | https://github.com/$REPO/actions/runs/${{ github.run_id }} |"
+            echo
+            echo "## 构建日志尾部（最后 120 行）"
+            echo
+            echo '```'
+            tail -n 120 build.log 2>/dev/null || echo "(没有 build.log：构建步骤未执行到)"
+            echo '```'
+            echo
+            echo "## 产物"
+            echo
+            echo '```'
+            ls -l dist/BilibiliClient-*-macos-arm64.app.zip* 2>/dev/null || echo "(无)"
+            echo '```'
+          } > "$F"
+          rm -rf /tmp/cs
+          if ! git clone -q --depth 1 --branch ci-status "$URL" /tmp/cs 2>/dev/null; then
+            git clone -q "$URL" /tmp/cs
+            git -C /tmp/cs checkout -q --orphan ci-status
+            git -C /tmp/cs rm -rq --ignore-unmatch . >/dev/null 2>&1 || true
+          fi
+          cp "$F" /tmp/cs/
+          git -C /tmp/cs add -A
+          git -C /tmp/cs -c user.name=ci -c user.email=ci@users.noreply.github.com \
+            commit -qm "ci: run #${{ github.run_number }} (${{ job.status }})" || true
+          git -C /tmp/cs push -q origin HEAD:ci-status && echo "已写入 ci-status 分支"

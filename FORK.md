@@ -31,7 +31,7 @@
 3. 不删任何类型 / 端点 / View / 设置项——上游的单向删改不会与我们的改动互斥。
 4. 同步用 `git fetch upstream main && git merge upstream/main`（或直接跑 `./scripts/fork_sync.sh`）；**不要 rebase 本分支的提交**。
 5. 每次同步后跑 `./scripts/fork_check.sh`；有红按下面的兜底处理。
-6. 本分支不打 tag、不发布 release、不改 `docs/appcast.xml`。
+6. 本分支不打 `vX.Y.Z` tag、不发布正式 release、不改 `docs/appcast.xml`（避免与上游的发布流程撞车）。唯一例外是 CI 的滚动预发布 `ci-macos-arm64`：它只挂 CI 产物、不碰 `version.txt` 与 appcast。
 
 ## 冲突兜底
 
