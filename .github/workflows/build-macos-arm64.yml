@@ -59,7 +59,7 @@ jobs:
         # 脚本当场静默退出（日志里连一行报错都没有，run #3/#4/#5 都是死在这）。
         # 显式给 SIGN_IDENTITY='-' 让脚本走「已知身份」分支，直接用 ad-hoc 签名，绕开那段管道。
         env:
-          TRACE: '1'   # 排查期开 xtrace：只有 trace 能看清 set -e 静默退出的位置
+          # TRACE: '1'  # 排查时打开：bash -x，能看到 set -e 静默退出的确切位置
         run: |
           set -o pipefail
           # 关键：显式用 Xcode 的 SDK。build_app.sh 在检测到
@@ -149,6 +149,30 @@ jobs:
           gh release upload ci-macos-arm64 "$OUT" "$OUT.sha256" --clobber
           echo "release: https://github.com/$GITHUB_REPOSITORY/releases/tag/ci-macos-arm64"
 
+      - name: 复核预发布资产（下载回来验哈希）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          {
+            echo
+            echo "=== 预发布资产复核（在 runner 上把刚上传的东西拉回来） ==="
+            D="$(mktemp -d)"
+            if gh release download ci-macos-arm64 -p '*.zip' -p '*.sha256' -D "$D" 2>&1; then
+              ls -l "$D"
+              EXPECT="$(cut -d' ' -f1 "$D"/*.sha256)"
+              ACTUAL="$(shasum -a 256 "$D"/*.zip | cut -d' ' -f1)"
+              if [ "$EXPECT" = "$ACTUAL" ]; then
+                echo "预发布资产校验：OK（sha256=$ACTUAL）"
+              else
+                echo "预发布资产校验：FAILED（期望 $EXPECT / 实际 $ACTUAL）"
+              fi
+            else
+              echo "预发布资产校验：下载失败（release 或资产没建起来）"
+            fi
+            echo "=== 复核结束 ==="
+          } >> build.log 2>&1
+
       - name: 写自检报告到 ci-status 分支
         if: always()
         env:
@@ -202,6 +226,7 @@ jobs:
             echo
             echo '```'
             ls -l dist/BilibiliClient-*-macos-arm64.app.zip* 2>/dev/null || echo "(无)"
+            cat dist/BilibiliClient-*-macos-arm64.app.zip.sha256 2>/dev/null || true
             echo '```'
           } > "$F"
           # 只放报告：用一个临时仓库，避免把整份源码也提交进 ci-status
