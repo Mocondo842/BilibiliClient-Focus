@@ -32,17 +32,17 @@ struct CommentCardView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
                         Text(comment.member?.uname ?? "匿名用户")
-                            .font(.callout.weight(.medium))
+                            .font(CommentFonts.callout.weight(.medium))
                             .lineLimit(1)
                         if let level = comment.member?.levelInfo?.currentLevel {
                             Text("Lv.\(level)")
-                                .font(.caption2)
+                                .font(CommentFonts.caption2)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
                         if comment.upAction?.like == true {
                             Label("UP 赞了", systemImage: "hand.thumbsup.fill")
-                                .font(.caption2)
+                                .font(CommentFonts.caption2)
                                 .foregroundStyle(.pink)
                         }
                     }
@@ -56,7 +56,7 @@ struct CommentCardView: View {
                                           liked: (comment.action ?? 0) == 1,
                                           likeCount: comment.like ?? 0)
                     }
-                    .font(.caption)
+                    .font(CommentFonts.caption)
                     .foregroundStyle(.secondary)
                 }
             }
@@ -67,7 +67,7 @@ struct CommentCardView: View {
                 } label: {
                     Label(isExpanded ? "收起回复" : "\(rcount) 条回复",
                           systemImage: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption)
+                        .font(CommentFonts.caption)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -95,16 +95,16 @@ struct CommentCardView: View {
                     .padding(.vertical, 4)
             } else if let replyError, replies.isEmpty {
                 Text(replyError)
-                    .font(.caption)
+                    .font(CommentFonts.caption)
                     .foregroundStyle(.secondary)
                 Button("点击重试") {
                     Task { await loadReplies() }
                 }
-                .font(.caption)
+                .font(CommentFonts.caption)
                 .buttonStyle(.plain)
             } else if replies.isEmpty {
                 Text("暂无回复")
-                    .font(.caption)
+                    .font(CommentFonts.caption)
                     .foregroundStyle(.secondary)
             } else if hasMoreReplies {
                 Button {
@@ -114,7 +114,7 @@ struct CommentCardView: View {
                         ProgressView().controlSize(.mini)
                     } else {
                         Text("加载更多回复")
-                            .font(.caption)
+                            .font(CommentFonts.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -166,11 +166,11 @@ struct ReplyRowView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(reply.member?.uname ?? "匿名用户")
-                        .font(.caption.weight(.medium))
+                        .font(CommentFonts.caption.weight(.medium))
                         .lineLimit(1)
                     if reply.upAction?.like == true {
                         Label("UP 赞了", systemImage: "hand.thumbsup.fill")
-                            .font(.caption2)
+                            .font(CommentFonts.caption2)
                             .foregroundStyle(.pink)
                     }
                     Spacer()
@@ -185,7 +185,7 @@ struct ReplyRowView: View {
                                       liked: (reply.action ?? 0) == 1,
                                       likeCount: reply.like ?? 0)
                 }
-                .font(.caption2)
+                .font(CommentFonts.caption2)
                 .foregroundStyle(.secondary)
             }
         }

@@ -10,6 +10,10 @@ final class PlayerController: ObservableObject {
     @Published var errorMessage: String?
     @Published var qualities: [Quality] = []
     @Published var currentQualityId: Int?
+    /// 当前视频流的解码信息（清晰度名 · 编码 · 分辨率 · 帧率 · 码率），供控制栏展示。
+    @Published var streamSummary = ""
+    /// 重建播放器后要恢复到的位置（切清晰度、从历史续播都走它）。
+    private var pendingResume: Double?
     /// 视频在线人数展示文本（如 "9.4万+"），随播放加载拉取
     @Published var onlineText: String?
 
@@ -136,7 +140,8 @@ final class PlayerController: ObservableObject {
         self.aid = aid
         self.bvid = bvid
         self.cid = cid
-        await resetAndLoad(qn: 80)
+        pendingResume = PlaybackProgressStore.position(bvid: bvid, cid: cid)
+        await resetAndLoad(qn: PlaybackPreferences.initialQuality)
     }
 
     func retry(aid: Int, bvid: String, cid: Int) async {
@@ -146,6 +151,10 @@ final class PlayerController: ObservableObject {
 
     func selectQuality(_ quality: Quality) async {
         guard !bvid.isEmpty else { return }
+        // 重建播放器前记住当前进度，否则换清晰度会从头播。
+        if let seconds = player?.currentTime().seconds, seconds.isFinite, seconds > 1 {
+            pendingResume = seconds
+        }
         state = .loading
         errorMessage = nil
         teardownPlayer()
@@ -163,6 +172,8 @@ final class PlayerController: ObservableObject {
         if let player, bvid != "" {
             let seconds = player.currentTime().seconds
             if seconds.isFinite, seconds > 0 {
+                let resumeKey = (bvid: self.bvid, cid: self.cid)
+                PlaybackProgressStore.save(seconds, bvid: resumeKey.bvid, cid: resumeKey.cid)
                 Task {
                     await HistoryReporter.report(aid: aid, cid: cid, progress: Int(seconds))
                 }
@@ -251,6 +262,13 @@ final class PlayerController: ObservableObject {
             player = AVPlayer(url: url)
             player?.automaticallyWaitsToMinimizeStalling = true
             player?.play()
+            if let resume = pendingResume, resume > 1 {
+                player?.seek(to: CMTime(seconds: resume, preferredTimescale: 600),
+                             toleranceBefore: .zero,
+                             toleranceAfter: .zero)
+                pendingResume = nil
+            }
+            streamSummary = Self.describe(video, qualities: qualities)
             startPlaybackMonitoring()
             startReportLoop()
             return nil
@@ -271,10 +289,12 @@ final class PlayerController: ObservableObject {
                 let seconds = player.currentTime().seconds
                 guard seconds.isFinite, seconds > 0 else { continue }
                 await HistoryReporter.report(aid: self.aid, cid: self.cid, progress: Int(seconds))
+                PlaybackProgressStore.save(seconds, bvid: self.bvid, cid: self.cid)
 
                 if let duration = player.currentItem?.duration.seconds,
                    duration.isFinite, seconds >= duration - 2 {
                     await HistoryReporter.report(aid: self.aid, cid: self.cid, progress: Int(duration))
+                    PlaybackProgressStore.clear(bvid: self.bvid, cid: self.cid)
                     break
                 }
             }
@@ -568,8 +588,8 @@ final class PlayerController: ObservableObject {
     private static func pickVideo(_ streams: [PlayURLData.DashStream],
                                   preferredQuality: Int?) -> PlayURLData.DashStream? {
         let withSegment = streams.filter { $0.segmentBase != nil }
-        let avc = withSegment.filter { $0.codecs?.hasPrefix("avc1") ?? false }
-        let candidates = avc.isEmpty ? withSegment : avc
+        // 编码偏好（设置页可改：自动 / H.264 / H.265 / AV1），默认仍是上游的"优先 AVC"。
+        let candidates = PlaybackPreferences.preferredStreams(withSegment)
         if let preferred = preferredQuality {
             if let match = candidates.first(where: { $0.id == preferred }) {
                 return match
@@ -581,6 +601,21 @@ final class PlayerController: ObservableObject {
             }
         }
         return candidates.sorted { $0.id > $1.id }.first
+    }
+
+    /// 「解码信息」文案：清晰度名 · 编码 · 分辨率 · 帧率 · 码率。
+    private static func describe(_ stream: PlayURLData.DashStream, qualities: [Quality]) -> String {
+        var parts: [String] = []
+        if let name = qualities.first(where: { $0.id == stream.id })?.name {
+            parts.append(name)
+        } else {
+            parts.append("qn \(stream.id)")
+        }
+        if let codecs = stream.codecs, !codecs.isEmpty { parts.append(codecs) }
+        if let width = stream.width, let height = stream.height { parts.append("\(width)×\(height)") }
+        if let fps = stream.frameRate, !fps.isEmpty { parts.append("\(fps)fps") }
+        if stream.bandwidth > 0 { parts.append(String(format: "%.1f Mbps", Double(stream.bandwidth) / 1_000_000)) }
+        return parts.joined(separator: " · ")
     }
 
     private func httpAssetOptions() -> [String: Any] {

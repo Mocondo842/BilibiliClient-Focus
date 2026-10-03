@@ -87,6 +87,10 @@ struct SettingsView: View {
     @AppStorage(SponsorPreferences.categoriesKey) private var sponsorCategories = SponsorPreferences.defaultCategoriesStorage
     @AppStorage(SponsorPreferences.muteSegmentsKey) private var sponsorMutesSegments = true
     @State private var cacheCleared = false
+    // 本 fork 新增：播放偏好与评论字号
+    @AppStorage(PlaybackPreferences.qualityKey) private var preferredQuality = PlaybackPreferences.QualityChoice.p1080.rawValue
+    @AppStorage(PlaybackPreferences.codecKey) private var preferredCodec = PlaybackPreferences.Codec.auto.rawValue
+    @AppStorage(PlaybackPreferences.commentFontSizeKey) private var commentFontSize = PlaybackPreferences.CommentFontSize.system.rawValue
 
     var body: some View {
         ScrollView {
@@ -103,6 +107,8 @@ struct SettingsView: View {
                 sponsorSection.padding(.vertical, 16)
                 Divider()
                 displaySection.padding(.vertical, 16)
+                Divider()
+                playbackSection.padding(.vertical, 16)
                 Divider()
                 favoriteSection.padding(.vertical, 16)
                 Divider()
@@ -214,6 +220,49 @@ struct SettingsView: View {
                 .fixedSize()
             }
             Text("卡片：首页式网格；列表：单列紧凑；两列列表：双列紧凑，全局所有视频列表同步切换。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// 本 fork 新增：播放清晰度/编码偏好、评论字号。
+    private var playbackSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("播放")
+            optionRow("优先清晰度") {
+                Picker("优先清晰度", selection: $preferredQuality) {
+                    ForEach(PlaybackPreferences.QualityChoice.allCases) { choice in
+                        Text(choice.label).tag(choice.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .fixedSize()
+            }
+            optionRow("优先编码") {
+                Picker("优先编码", selection: $preferredCodec) {
+                    ForEach(PlaybackPreferences.Codec.allCases) { codec in
+                        Text(codec.label).tag(codec.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .fixedSize()
+            }
+            Text("清晰度只用于首次加载（之后可在播放页随时切）；编码优先在服务器提供多路编码时生效，拿不到偏好编码会自动回退到 H.264。当前视频实际用的清晰度、编码、分辨率、帧率与码率，在播放控制栏的「画质」菜单里可以看到。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            optionRow("评论字号") {
+                Picker("评论字号", selection: $commentFontSize) {
+                    ForEach(PlaybackPreferences.CommentFontSize.allCases) { size in
+                        Text(size.label).tag(size.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .fixedSize()
+            }
+            Text("默认跟随系统；选了档位后只缩放评论区文字，其余界面不受影响。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

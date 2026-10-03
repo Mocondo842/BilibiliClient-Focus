@@ -7,6 +7,8 @@ struct DynamicFeedView: View {
     @State private var items: [DynamicItem] = []
     @State private var followedUPs: [FollowedUser] = []
     @State private var selectedUP: Int?
+    /// 动态类型筛选：只看视频投稿（MAJOR_TYPE_ARCHIVE），或看全部关注动态。
+    @State private var videoOnly = false
     @State private var offset: String?
     @State private var hasMore = true
     @State private var isLoading = false
@@ -55,9 +57,11 @@ struct DynamicFeedView: View {
         }
     }
 
+    /// 先按本地规则滤掉官方注入条目，再按「仅视频 / 选了某个 UP」筛。
     private var displayItems: [DynamicItem] {
-        guard selectedUP != nil else { return items.followOnly }
-        return items.filter {
+        let base = items.followOnly
+        guard selectedUP != nil || videoOnly else { return base }
+        return base.filter {
             $0.modules.moduleDynamic?.major?.type == "MAJOR_TYPE_ARCHIVE"
         }
     }
@@ -66,6 +70,11 @@ struct DynamicFeedView: View {
     private var topBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                chip(title: "仅视频", isSelected: videoOnly) { videoOnly = true }
+                chip(title: "全部动态", isSelected: !videoOnly) { videoOnly = false }
+                Rectangle()
+                    .fill(.quaternary)
+                    .frame(width: 1, height: 18)
                 chip(title: "全部", isSelected: selectedUP == nil) {
                     selectUP(nil)
                 }
@@ -84,6 +93,9 @@ struct DynamicFeedView: View {
     private var leftBar: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 8) {
+                chip(title: "仅视频", isSelected: videoOnly) { videoOnly = true }
+                chip(title: "全部动态", isSelected: !videoOnly) { videoOnly = false }
+                Divider().padding(.vertical, 2)
                 chip(title: "全部", isSelected: selectedUP == nil) {
                     selectUP(nil)
                 }

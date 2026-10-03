@@ -20,6 +20,8 @@ struct PlayerBarConfig {
     /// 清晰度列表；空表示不显示画质入口（直播）
     var qualities: [PlayerController.Quality] = []
     var currentQualityId: Int?
+    /// 解码信息（清晰度 · 编码 · 分辨率 · 帧率 · 码率），显示在画质菜单里
+    var streamSummary = ""
     /// 空降助手在进度条上要画的片段标记（空 = 不画）
     var sponsorMarkers: [SponsorMarker] = []
     /// 空降提示卡片；nil = 不显示
@@ -49,6 +51,7 @@ final class PlayerBarModel: ObservableObject {
     @Published private(set) var danmakuEnabled = true
     @Published private(set) var qualities: [PlayerController.Quality] = []
     @Published private(set) var currentQualityId: Int?
+    @Published private(set) var streamSummary = ""
     /// 空降助手标记：跟着宿主推入的配置更新，不在节拍里重算。
     @Published private(set) var sponsorMarkers: [SponsorMarker] = []
     /// 空降提示卡片：同样由宿主推入。
@@ -119,6 +122,7 @@ final class PlayerBarModel: ObservableObject {
         }
         qualities = config.qualities
         currentQualityId = config.currentQualityId
+        streamSummary = config.streamSummary
         if sponsorMarkers != config.sponsorMarkers {
             sponsorMarkers = config.sponsorMarkers
         }
@@ -490,6 +494,11 @@ struct PlayerControlBar: View {
                         Text(quality.name)
                     }
                 }
+            }
+            if !model.streamSummary.isEmpty {
+                Divider()
+                // 解码信息：只展示，不参与选择
+                Text(model.streamSummary)
             }
         } label: {
             Text(currentQualityName ?? "画质")

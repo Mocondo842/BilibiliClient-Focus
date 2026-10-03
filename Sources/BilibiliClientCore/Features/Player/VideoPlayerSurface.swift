@@ -56,6 +56,7 @@ struct VideoPlayerSurface: View {
         config.danmakuEnabled = danmakuEnabled
         config.qualities = playerController.qualities
         config.currentQualityId = playerController.currentQualityId
+        config.streamSummary = playerController.streamSummary
         config.sponsorMarkers = playerController.sponsorMarkers
         config.sponsorNotice = playerController.sponsorNotice
         config.onSponsorUndo = { playerController.undoSponsorAction() }
