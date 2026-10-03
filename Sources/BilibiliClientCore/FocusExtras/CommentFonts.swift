@@ -24,6 +24,7 @@ enum CommentFonts {
         return .system(size: baseSize(style) * scale)
     }
 
+    static var body: Font { font(.body) }
     static var callout: Font { font(.callout) }
     static var caption: Font { font(.caption) }
     static var caption2: Font { font(.caption2) }

@@ -32,7 +32,7 @@ struct CommentCardView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
                         Text(comment.member?.uname ?? "匿名用户")
-                            .font(CommentFonts.callout.weight(.medium))
+                            .font(CommentFonts.body.weight(.medium))
                             .lineLimit(1)
                         if let level = comment.member?.levelInfo?.currentLevel {
                             Text("Lv.\(level)")
@@ -47,7 +47,7 @@ struct CommentCardView: View {
                         }
                     }
 
-                    RichText(text: comment.content?.message ?? "", font: .callout)
+                    RichText(text: comment.content?.message ?? "", font: CommentFonts.body)
 
                     HStack(spacing: 14) {
                         Text(Formatters.timeAgo(comment.ctime ?? 0))
@@ -166,7 +166,7 @@ struct ReplyRowView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(reply.member?.uname ?? "匿名用户")
-                        .font(CommentFonts.caption.weight(.medium))
+                        .font(CommentFonts.body.weight(.medium))
                         .lineLimit(1)
                     if reply.upAction?.like == true {
                         Label("UP 赞了", systemImage: "hand.thumbsup.fill")
@@ -176,7 +176,7 @@ struct ReplyRowView: View {
                     Spacer()
                 }
 
-                RichText(text: reply.content?.message ?? "", font: .caption)
+                RichText(text: reply.content?.message ?? "", font: CommentFonts.body)
 
                 HStack(spacing: 10) {
                     Text(Formatters.timeAgo(reply.ctime ?? 0))
@@ -185,7 +185,7 @@ struct ReplyRowView: View {
                                       liked: (reply.action ?? 0) == 1,
                                       likeCount: reply.like ?? 0)
                 }
-                .font(CommentFonts.caption2)
+                .font(CommentFonts.caption)
                 .foregroundStyle(.secondary)
             }
         }

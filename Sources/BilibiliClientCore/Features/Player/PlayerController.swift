@@ -14,6 +14,10 @@ final class PlayerController: ObservableObject {
     @Published var streamSummary = ""
     /// 重建播放器后要恢复到的位置（切清晰度、从历史续播都走它）。
     private var pendingResume: Double?
+    /// 等播放项 ready 再 seek：AVPlayer 在 item 未就绪时会丢掉 seek（切清晰度后从头播就是这么来的）。
+    private var readyObserver: NSKeyValueObservation?
+    /// 播到结尾时清掉本地进度，避免下次进来从结尾往回跳。
+    private var endObserver: NSObjectProtocol?
     /// 视频在线人数展示文本（如 "9.4万+"），随播放加载拉取
     @Published var onlineText: String?
 
@@ -172,8 +176,14 @@ final class PlayerController: ObservableObject {
         if let player, bvid != "" {
             let seconds = player.currentTime().seconds
             if seconds.isFinite, seconds > 0 {
-                let resumeKey = (bvid: self.bvid, cid: self.cid)
-                PlaybackProgressStore.save(seconds, bvid: resumeKey.bvid, cid: resumeKey.cid)
+                // 已经播到结尾（含手动拖到结尾）就清掉进度，而不是存一个"结尾"位置，
+                // 否则下次进来会从末尾往回跳几十秒。
+                let duration = player.currentItem?.duration.seconds ?? 0
+                if duration.isFinite, duration > 0, seconds >= duration - 3 {
+                    PlaybackProgressStore.clear(bvid: self.bvid, cid: self.cid)
+                } else {
+                    PlaybackProgressStore.save(seconds, bvid: self.bvid, cid: self.cid)
+                }
                 Task {
                     await HistoryReporter.report(aid: aid, cid: cid, progress: Int(seconds))
                 }
@@ -262,13 +272,8 @@ final class PlayerController: ObservableObject {
             player = AVPlayer(url: url)
             player?.automaticallyWaitsToMinimizeStalling = true
             player?.play()
-            if let resume = pendingResume, resume > 1 {
-                // 这里是 async 上下文，AVPlayer 会选中 async 版的 seek（返回 Bool），必须 await。
-                _ = await player?.seek(to: CMTime(seconds: resume, preferredTimescale: 600),
-                                       toleranceBefore: .zero,
-                                       toleranceAfter: .zero)
-                pendingResume = nil
-            }
+            restorePendingResumeWhenReady()
+            observePlayToEnd()
             streamSummary = Self.describe(video, qualities: qualities)
             startPlaybackMonitoring()
             startReportLoop()
@@ -302,7 +307,44 @@ final class PlayerController: ObservableObject {
         }
     }
 
+    /// 播放项就绪后再恢复进度（并只做一次）。
+    private func restorePendingResumeWhenReady() {
+        readyObserver?.invalidate()
+        readyObserver = player?.currentItem?.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
+            guard item.status == .readyToPlay else { return }
+            Task { @MainActor [weak self] in
+                guard let self, let resume = self.pendingResume, resume > 1 else { return }
+                self.pendingResume = nil
+                _ = await self.player?.seek(to: CMTime(seconds: resume, preferredTimescale: 600),
+                                            toleranceBefore: .zero,
+                                            toleranceAfter: .zero)
+                self.readyObserver?.invalidate()
+                self.readyObserver = nil
+            }
+        }
+    }
+
+    /// 播到结尾 → 清掉本地进度（下次从头播）。
+    private func observePlayToEnd() {
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        guard let item = player?.currentItem else { return }
+        endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime,
+                                                            object: item,
+                                                            queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                PlaybackProgressStore.clear(bvid: self.bvid, cid: self.cid)
+            }
+        }
+    }
+
     private func teardownPlayer() {
+        readyObserver?.invalidate()
+        readyObserver = nil
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+            self.endObserver = nil
+        }
         holdActive = false
         onlineText = nil
         stopPlaybackMonitoring()
