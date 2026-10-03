@@ -263,9 +263,10 @@ final class PlayerController: ObservableObject {
             player?.automaticallyWaitsToMinimizeStalling = true
             player?.play()
             if let resume = pendingResume, resume > 1 {
-                player?.seek(to: CMTime(seconds: resume, preferredTimescale: 600),
-                             toleranceBefore: .zero,
-                             toleranceAfter: .zero)
+                // 这里是 async 上下文，AVPlayer 会选中 async 版的 seek（返回 Bool），必须 await。
+                _ = await player?.seek(to: CMTime(seconds: resume, preferredTimescale: 600),
+                                       toleranceBefore: .zero,
+                                       toleranceAfter: .zero)
                 pendingResume = nil
             }
             streamSummary = Self.describe(video, qualities: qualities)
