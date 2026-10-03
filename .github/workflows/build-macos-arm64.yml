@@ -98,6 +98,9 @@ jobs:
 
       - name: 静态自检（架构 / plist / 签名 / 去推荐化锚点）
         run: |
+          # 输出同时写进 build.log：CI 的步骤日志需要 admin，只有 build.log 会进诊断报告
+          set -o pipefail
+          {
           set -euo pipefail
           APP="dist/BilibiliClient.app"
           test -d "$APP"
@@ -114,6 +117,7 @@ jobs:
           ./scripts/fork_check.sh
           echo "--- 归档 ---"
           ls -l dist/archive/*/*.zip
+          } 2>&1 | tee -a build.log
 
       - name: 产物哈希
         id: artifact
@@ -299,6 +303,9 @@ jobs:
 
       - name: 静态自检（IPA / plist / 架构）
         run: |
+          # 输出同时写进 build-ios.log（步骤日志读不到），见 macOS job 同款说明
+          set -o pipefail
+          {
           set -euo pipefail
           IPA="dist/ios/BilibiliClient-unsigned.ipa"
           test -f "$IPA"
@@ -317,6 +324,7 @@ jobs:
           codesign -dv "$APP" 2>&1 | head -3 || echo "(未签名，符合预期：真机 IPA 交给自签工具)"
           echo "--- 去推荐化锚点守卫 ---"
           ./scripts/fork_check.sh
+          } 2>&1 | tee -a build-ios.log
 
       - name: 产物哈希
         id: ios_artifact
