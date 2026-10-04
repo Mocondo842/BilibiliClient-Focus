@@ -193,7 +193,7 @@ echo "预发布资产校验：OK（sha256=$ACTUAL）"
 
 ---
 
-## 七、时间线（11 次运行，最后连续 3 次全绿）
+## 七、时间线（18 次运行）
 
 | run | 结果 | 直接原因 | 修复 |
 |---|---|---|---|
@@ -208,6 +208,13 @@ echo "预发布资产校验：OK（sha256=$ACTUAL）"
 | 9 | **success** | — | 静态自检全过；**资产回下载校验 OK**（sha256 `84259ebd…96ab`，5,449,329 bytes） |
 | 10 | **success** | — | 加上 iOS job：macOS 5,449,340 B + iOS `.ipa` 6,994,581 B，两份资产各自回下载校验 OK |
 | 11 | **success** | — | 把静态自检输出也 tee 进 `build.log`：报告里现在能看到 Mach-O `arm64`、`CFBundleVersion=171`、`LSMinimumSystemVersion=26.0`、`SUFeedURL` 指向本分支、iOS 的 `platform IOS` 与 `CFBundleIcons`、以及「未签名」状态 |
+| 12 | fail | `PlayerController.swift:266:17: error: expression is 'async' but is not marked with 'await'` | async 上下文选中了 `AVPlayer` 的 async `seek` 重载 → `_ = await player?.seek(...)` |
+| 13 | fail | 构建绿、守卫红：`need 'guard selectedUP != nil else { return items.followOnly }'` 不再匹配 | 守卫改成锚定稳定符号（`items.followOnly`/`videoOnly`），并加功能锚点（**守卫红是设计**） |
+| 14 | **success** | — | 五项功能落地；守卫 22 项全绿；`CFBundleVersion=175` |
+| 15 | **success** | — | 三项修复（切清晰度丢位置 / 播完复习不清 / 登录不持久 + 评论字号 + 动态评论区）；`CFBundleVersion=177` |
+| 16 | **success** | — | 低清晰度路径统一（`finishPlayerSetup`）+ 自动播放开关 + 动态评论区字号；`CFBundleVersion=178` |
+| 17 | fail | `VideoDetailView.swift:520:32: error: cannot find type 'AVPlayer' in scope` | 该文件首次**写出** AV 类型名（`mountedPlayer: AVPlayer?`），只 import 了 SwiftUI → 补 `import AVFoundation` |
+| 18 | **success** | — | 复用同一 `AVPlayer` 实例（`replaceCurrentItem`）+ 画面常驻条件分支之外 + 切清晰度沿用播放状态；守卫 28 项全绿；`CFBundleVersion=180`（v1.9.7） |
 
 第 6 / 9 次的实测环境：`arm64 / macOS 26.6.2 / Xcode 26.6 (17F113) / Swift 6.3.3`；静态自检通过（Mach-O 含 `arm64`、`Info.plist` 关键键齐全、去推荐化锚点守卫全绿）；run #9 额外把预发布资产下载回来比对了 sha256。
 
@@ -309,3 +316,30 @@ jobs:
 - 更新流程：改本文件（工作区、随代码受版本控制）→ 用 `obsidian_write` 覆盖记忆条目并更新 frontmatter 的 `last_updated` / `status` → 索引由插件/watcher 的下一次运行完成。
 - 手工强制索引：**需要先停 DSH**（Milvus Lite 是单进程，数据库被插件占用时会报 `Could not open the local Milvus database`），再跑
   `~/.local/bin/memsearch index /home/mocondo/ObsidianVault/memory`；用 `memsearch search "<关键词>"` 验证召回。
+
+## 十一、补丁漏在三处：多路径、多渲染器、共用函数（run #12~#18）
+
+run #14 之后连续四轮真机验收，暴露的都不是「API 不配合」，而是**同一个功能有多份实现**：
+
+1. **多路径**：`play()` 里有三条起播路径——`qn <= 80` 走 MP4 直链、否则走 DASH 本地代理、两者都失败再走**在线流式兜底**（`tryProgressiveStreaming`）。第一轮补丁只加在 DASH 上：往 1080P 及以下切会从头播且解码信息不更新；到第三轮才发现流式兜底那条连自动播放设置都绕过了（它无条件 `play()`）。
+   - 判断法：**「本该更新的状态没更新」+「本该恢复的行为没恢复」同时出现 = 那条路径整段没走**；症状的边界值（`qn <= 80`）往往就是那个 `if`。
+2. **多渲染器**：评论区正文有两个渲染器（视频详情 `CommentCardView`、动态/图文详情 `DynamicCommentRowView`），改一个不等于改了功能 → 规则收敛到共享类型（`CommentFonts`）并写进守卫。
+3. **共用函数**：把三条路径的收尾抽成 `finishPlayerSetup(summary:)` 之后，又把「按设置自动播放」写进了它——换清晰度也走这个函数，于是被误伤：关掉自动播放后一切清晰度就暂停。**共用收尾只做与场景无关的事（写状态/挂观察者/恢复进度/清理）；有场景差异的决策由调用方传入。**
+
+### 1. 视图身份即生命周期（一次报障三个「bug」）
+
+「切清晰度会退出全屏 / 音量像被重置 / 切完变成暂停」是同一个动作：换清晰度时 `player = nil` 再新建 `AVPlayer`，而画面视图是 `.id(player)`、外层还有 `switch player.state` 决定挂不挂它。
+
+- SwiftUI 里 `.id` 变化、**条件分支切换**、把视图移出层级——三者任一发生，`NSViewRepresentable` 背后的 NSView 就被销毁重建。**AVKit 原生全屏挂在那个 view 上**，音量/静音/倍速挂在**播放器实例**上，所以重建 = 全屏被踢出 + 音量回默认。
+- 两条对策：①**换内容不换容器**（`replaceCurrentItem(with:)`，别整体替换实例）；②**画面常驻**、放在条件分支之外——`.id` 相同**不足以**跨分支复用，别赌语义，直接别换分支。
+- 多症状先**聚类**：问「这几个状态分别挂在谁身上、谁把它们一起干掉了」，三个独立 bug 常常只有一个动作（重建）。
+
+### 2. 守卫要写「计数断言」和「禁止态断言」
+
+- **存在性断言抓不到「漏一条路径」**：`grep -q finishPlayerSetup` 一直绿，而第三条路径根本没调用它。改成计数断言 `grep -c 'replaceCurrentItem(with:' >= 3` 立刻变红，把第三、第四条路径顶出来。
+- **禁止态断言防回归**：`^[[:space:]]*player = AVPlayer\(`。要**锚定行首/赋值形态**——第一版写成 `player = AVPlayer\(` 就命中了直播播放器的 `let player = AVPlayer(playerItem:)`（合法写法），**误报比漏报更费时间**。
+- 把路径条数写成断言还顺手证伪了「这条路径没问题」：计数从 2 提到 3 的那一刻，多出来的那条就是漏网的那条。
+
+### 3. 本地没有工具链时，写出一个类型名 = 新增一个编译依赖
+
+开发机没有 Swift/Xcode，**CI 是唯一的编译器**。给视图文件加 `private var mountedPlayer: AVPlayer?`（原来只写 `player.player != nil` 判空）→ `error: cannot find type 'AVPlayer' in scope`（run #17）。**不命名类型的写法不引入编译依赖**，所以「我只是把判空挪了个地方」也会红。推前自检加一条：**这次新写了哪些类型名？它们在每个受影响文件的 import 里吗？**
