@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 #endif
+import AVFoundation
 import SwiftUI
 
 struct VideoDetailView: View {
