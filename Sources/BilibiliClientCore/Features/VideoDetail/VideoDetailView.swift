@@ -452,14 +452,24 @@ struct VideoDetailView: View {
     @ViewBuilder
     private var playerSection: some View {
         ZStack {
+            // 画面常驻在最外层：只要播放器实例还在就不随 `state` 增删。
+            // 换清晰度会短暂进 `.loading`，这时若把画面拆掉，AVPlayerView 就被销毁重建——
+            // AVKit 原生全屏会被一起踢出（表现为「一切清晰度就退出全屏」），播放器的音量
+            // 等瞬时状态也跟着丢。同理不能放进下面的条件分支：分支切换同样是重建。
+            if let avPlayer = mountedPlayer {
+                surface()
+                    .id(avPlayer)
+            }
             switch player.state {
             case .idle, .loading:
-                Rectangle().fill(.black)
-                VStack(spacing: 10) {
-                    ProgressView()
-                    Text("正在加载播放地址…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if mountedPlayer == nil {
+                    Rectangle().fill(.black)
+                    VStack(spacing: 10) {
+                        ProgressView()
+                        Text("正在加载播放地址…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             case .failed:
                 Rectangle().fill(.black)
@@ -478,12 +488,8 @@ struct VideoDetailView: View {
                 }
                 .padding()
             case .ready:
-                if isPlayingInline, let avPlayer = player.player {
-                    // 默认形态：播放组件就是页面里的普通视图
-                    surface()
-                        .id(avPlayer)
-                } else {
-                    // 画面已移入播放窗口（分离/全屏）：页面位置留空
+                if mountedPlayer == nil {
+                    // 画面已移入播放窗口（分离窗口）：页面位置留空
                     Color.clear
                 }
             }
@@ -491,7 +497,7 @@ struct VideoDetailView: View {
         .aspectRatio(16 / 9, contentMode: .fit)
         .overlay {
             // 有画面时保持完整矩形画面，不画边框；占位状态保留一圈细边
-            if !isPlayingInline {
+            if mountedPlayer == nil {
                 Rectangle()
                     .strokeBorder(.white.opacity(0.08), lineWidth: 1)
             }
@@ -506,9 +512,13 @@ struct VideoDetailView: View {
         #endif
     }
 
-    /// 画面当前是否正在页面内播放（决定页面显示播放组件还是空位）。
-    private var isPlayingInline: Bool {
-        player.state == .ready && player.player != nil && !playbackWindow.isOpen
+    /// 当前要挂在页面里的播放器画面（`nil` = 显示占位或空位）。
+    ///
+    /// 刻意不看 `state`：换清晰度时 state 会短暂变 `.loading`，但画面必须继续挂着，
+    /// 否则 AVPlayerView 被重建，AVKit 原生全屏会被一起踢出。
+    /// 画面已移入分离窗口时由那个窗口承载，这里返回 `nil`。
+    private var mountedPlayer: AVPlayer? {
+        playbackWindow.isOpen ? nil : player.player
     }
 
     /// 视频下方那一行：观看人数、弹幕开关、分离窗口与清晰度切换。

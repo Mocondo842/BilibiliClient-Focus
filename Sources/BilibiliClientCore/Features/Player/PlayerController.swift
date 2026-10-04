@@ -14,6 +14,9 @@ final class PlayerController: ObservableObject {
     @Published var streamSummary = ""
     /// 重建播放器后要恢复到的位置（切清晰度、从历史续播都走它）。
     private var pendingResume: Double?
+    /// 换清晰度时要沿用的播放器瞬时状态（是否在播/音量/静音）。
+    /// 播放器被重建时这些值都会丢回默认，而「接着看」不该等于「重新打开」。
+    private var carryOver: PlaybackCarryOver?
     /// 等播放项 ready 再 seek：AVPlayer 在 item 未就绪时会丢掉 seek（切清晰度后从头播就是这么来的）。
     private var readyObserver: NSKeyValueObservation?
     /// 播到结尾时清掉本地进度，避免下次进来从结尾往回跳。
@@ -26,6 +29,14 @@ final class PlayerController: ObservableObject {
         case loading
         case ready
         case failed
+    }
+
+    /// 换清晰度前记下的瞬时状态（进度另有 `pendingResume`）。
+    /// 只有「打开视频页」才该看自动播放设置；换清晰度沿用这里的值。
+    private struct PlaybackCarryOver {
+        var wasPlaying = false
+        var volume: Float = 1
+        var isMuted = false
     }
 
     struct Quality: Identifiable, Hashable {
@@ -155,13 +166,21 @@ final class PlayerController: ObservableObject {
 
     func selectQuality(_ quality: Quality) async {
         guard !bvid.isEmpty else { return }
-        // 重建播放器前记住当前进度，否则换清晰度会从头播。
-        if let seconds = player?.currentTime().seconds, seconds.isFinite, seconds > 1 {
-            pendingResume = seconds
+        // 换清晰度是「接着看」，不是「打开视频」：进度、是否在播、音量都要沿用。
+        if let player {
+            let seconds = player.currentTime().seconds
+            if seconds.isFinite, seconds > 1 {
+                pendingResume = seconds
+            }
+            carryOver = PlaybackCarryOver(wasPlaying: player.timeControlStatus != .paused,
+                                          volume: player.volume,
+                                          isMuted: player.isMuted)
         }
         state = .loading
         errorMessage = nil
-        teardownPlayer()
+        // 保留 AVPlayer 实例：画面视图以 `.id(player)` 为标识，换实例等于重建 AVPlayerView，
+        // AVKit 原生全屏会被踢出、播放器瞬时状态也一起丢。
+        teardownPlayer(keepingPlayer: true)
         do {
             try await loadDASH(qn: quality.id, updateQualities: false)
         } catch {
@@ -190,6 +209,7 @@ final class PlayerController: ObservableObject {
             }
         }
         teardownPlayer()
+        carryOver = nil
         loadedKey = nil
         state = .idle
         if Self.activeController === self {
@@ -203,7 +223,9 @@ final class PlayerController: ObservableObject {
     private func resetAndLoad(qn: Int) async {
         state = .loading
         errorMessage = nil
-        teardownPlayer()
+        // 首次加载/重试：起播看自动播放设置，没有要沿用的瞬时状态。
+        carryOver = nil
+        teardownPlayer(keepingPlayer: true)
         do {
             try await loadDASH(qn: qn, updateQualities: true)
         } catch {
@@ -233,9 +255,11 @@ final class PlayerController: ObservableObject {
            let first = mp4.durl?.first,
            let url = URL(string: first.url.replacingOccurrences(of: "http://", with: "https://")) {
             let asset = AVURLAsset(url: url, options: httpAssetOptions())
-            player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
-            player?.automaticallyWaitsToMinimizeStalling = true
-            // MP4 直链与 DASH 是两条路径，收尾（自动播放/恢复进度/解码信息/播完清理）必须共用，
+            let target = player ?? AVPlayer()
+            target.automaticallyWaitsToMinimizeStalling = true
+            target.replaceCurrentItem(with: AVPlayerItem(asset: asset))
+            if player == nil { player = target }
+            // MP4 直链与 DASH 是两条路径，收尾（起播策略/恢复进度/解码信息/播完清理）必须共用，
             // 否则往 1080P 及以下切清晰度会走这条路：从头播且解码信息不更新。
             finishPlayerSetup(summary: Self.describeMP4(quality: qn, qualities: qualities, durl: first))
             startPlaybackMonitoring()
@@ -271,8 +295,10 @@ final class PlayerController: ObservableObject {
             let videoMedia = try await Self.makeMedia(from: video)
             let audioMedia = try await Self.makeMedia(from: audio)
             let url = try await proxy.start(video: videoMedia, audio: audioMedia)
-            player = AVPlayer(url: url)
-            player?.automaticallyWaitsToMinimizeStalling = true
+            let target = player ?? AVPlayer()
+            target.automaticallyWaitsToMinimizeStalling = true
+            target.replaceCurrentItem(with: AVPlayerItem(url: url))
+            if player == nil { player = target }
             finishPlayerSetup(summary: Self.describe(video, qualities: qualities))
             startPlaybackMonitoring()
             startReportLoop()
@@ -306,10 +332,23 @@ final class PlayerController: ObservableObject {
         }
     }
 
-    /// 两条播放路径共用的收尾：按设置起播、记录解码信息、就绪后恢复进度、播完清进度。
+    /// 两条播放路径共用的收尾：定起播策略、记录解码信息、就绪后恢复进度、播完清进度。
+    ///
+    /// 只有「打开视频页」才看自动播放设置；换清晰度沿用切换前的状态——否则关掉自动播放后
+    /// 每次切清晰度都会莫名暂停，而开着自动播放时暂停着切清晰度又会自己播起来。
     private func finishPlayerSetup(summary: String) {
         streamSummary = summary
-        if PlaybackPreferences.autoplayOnOpen {
+        let carried = carryOver
+        carryOver = nil
+        if let carried {
+            player?.volume = carried.volume
+            player?.isMuted = carried.isMuted
+            if carried.wasPlaying {
+                player?.play()
+            } else {
+                player?.pause()
+            }
+        } else if PlaybackPreferences.autoplayOnOpen {
             player?.play()
         }
         restorePendingResumeWhenReady()
@@ -347,7 +386,11 @@ final class PlayerController: ObservableObject {
         }
     }
 
-    private func teardownPlayer() {
+    /// 拆掉播放项与观察者。
+    /// `keepingPlayer` 为真时不释放 AVPlayer 实例——换清晰度必须复用同一个实例，
+    /// 否则画面视图的 `.id(player)` 变化会重建 AVPlayerView：AVKit 原生全屏被踢出，
+    /// 音量等播放器瞬时状态也一起丢回默认值。
+    private func teardownPlayer(keepingPlayer: Bool = false) {
         readyObserver?.invalidate()
         readyObserver = nil
         if let endObserver {
@@ -358,7 +401,9 @@ final class PlayerController: ObservableObject {
         onlineText = nil
         stopPlaybackMonitoring()
         player?.pause()
-        player = nil
+        if !keepingPlayer {
+            player = nil
+        }
         proxy.stop()
     }
 
@@ -614,10 +659,16 @@ final class PlayerController: ObservableObject {
         }
         do {
             let streamURL = try await proxy.startProgressive(baseURL: url)
-            player = AVPlayer(url: streamURL)
-            player?.automaticallyWaitsToMinimizeStalling = true
-            player?.play()
+            // 和另外两条路径一样复用同一个播放器实例并走共用收尾：直接换播放器会重建
+            // AVPlayerView（退出全屏、音量丢回默认），直接 play() 还会绕过自动播放设置。
+            let target = player ?? AVPlayer()
+            target.automaticallyWaitsToMinimizeStalling = true
+            target.replaceCurrentItem(with: AVPlayerItem(url: streamURL))
+            if player == nil { player = target }
+            currentQualityId = stream.id
+            finishPlayerSetup(summary: Self.describe(stream, qualities: qualities))
             startPlaybackMonitoring()
+            startReportLoop()
             return true
         } catch {
             return false

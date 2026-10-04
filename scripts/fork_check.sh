@@ -35,13 +35,32 @@ need 'PlaybackProgressStore' '本地播放进度仍在'
 need 'restorePendingResumeWhenReady' '就绪后恢复进度（切清晰度不丢位置）仍在'
 need 'AVPlayerItemDidPlayToEndTime' '播完清进度仍在'
 need 'SessionFallbackStore' '登录兜底存储仍在'
-need 'finishPlayerSetup' '两条播放路径共用收尾（进度/解码信息）仍在'
+need 'finishPlayerSetup' '三条播放路径共用收尾（进度/解码信息）仍在'
 need 'PlaybackPreferences\.autoplayOnOpen' '自动播放开关仍在'
 need 'DynamicCommentRowView' '动态评论区仍在'
 need 'PlaybackPreferences\.initialQuality' '优先清晰度仍在'
 need 'PlaybackPreferences\.preferredStreams' '优先编码仍在'
 need 'CommentFonts\.' '评论字号缩放仍在'
 need 'ForEach\(items\.followOnly\)' '菜单栏面板过滤'
+echo "[3b/4] 播放器瞬时状态（切清晰度不许重建画面/播放器）"
+need 'private struct PlaybackCarryOver' '换清晰度沿用播放状态（是否在播/音量）仍在'
+need 'teardownPlayer\(keepingPlayer: true\)' '换清晰度复用同一 AVPlayer 实例仍在'
+need 'private var mountedPlayer' '画面不随 loading 增删（原生全屏才不会被踢）仍在'
+if [ "$(grep -ro 'replaceCurrentItem(with:' Sources --include=*.swift | wc -l | tr -d ' ')" -ge 3 ]; then
+  ok "三条播放路径都用 replaceCurrentItem 换流（画面不重建）"
+else
+  bad "三条播放路径必须都换 item 而不是换播放器（否则 AVPlayerView 重建、退出全屏）"
+fi
+if [ "$(grep -ro 'finishPlayerSetup(summary:' Sources --include=*.swift | wc -l | tr -d ' ')" -ge 3 ]; then
+  ok "三条播放路径都走共用收尾（起播策略/进度/解码信息）"
+else
+  bad "有播放路径没走收尾（起播策略/进度/解码信息会漏）——MP4 / DASH / 流式兜底共三条"
+fi
+if grep -rqE '^[[:space:]]*player = AVPlayer\(' Sources --include=*.swift; then
+  bad "播放器又被整体替换：换清晰度必须复用同一实例，否则退出全屏且音量丢回默认"
+else
+  ok "播放器实例不被整体替换（视频播放器的赋值点）"
+fi
 echo
 echo "[4/4] 自动更新"
 if grep -qE 'SPARKLE_FEED_URL:-https://example\.invalid/bilibiliclient-fork/appcast\.xml' scripts/build_app.sh; then
